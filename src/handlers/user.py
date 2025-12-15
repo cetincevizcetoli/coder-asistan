@@ -1,1 +1,0 @@
-Content preserved from original handlers/user.py

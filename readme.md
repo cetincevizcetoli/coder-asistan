@@ -1,67 +1,71 @@
-🤖 Coder-Asistan: Terminal Tabanlı AI Kodlama Arkadaşınız
+# 🤖 Coder-Asistan: Terminal Tabanlı AI Kodlama Arkadaşınız
 
-https://img.shields.io/badge/python-3.8%252B-blue
-https://img.shields.io/badge/license-MIT-green
-https://img.shields.io/badge/status-stable-success
+![Python](https://img.shields.io/badge/python-3.8%252B-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Status](https://img.shields.io/badge/status-stable-success)
 
-Coder-Asistan, tarayıcı sekmeleri arasında kaybolmadan, doğrudan terminalinizden çıkmadan kod yazmanıza, dosya yönetmenize ve proje mimarisi kurmanıza yardımcı olan hafif, modüler ve güvenli bir CLI (Komut Satırı Arayüzü) aracıdır.
-🚀 Neden Coder-Asistan?
+**Coder-Asistan**, tarayıcı sekmeleri arasında kaybolmadan, doğrudan terminalinizden çıkmadan kod yazmanıza, dosya yönetmenize ve proje mimarisi kurmanıza yardımcı olan hafif, modüler ve güvenli bir CLI (Komut Satırı Arayüzü) aracıdır.
+
+## 🚀 Neden Coder-Asistan?
 
 Piyasada birçok AI aracı varken neden bunu kullanmalısınız?
 
-    🔒 Tam Gizlilik & Güvenlik: Sadece sizin belirlediğiniz dosyaları okur. Path Traversal koruması ile sisteminizin geri kalanına dokunmaz.
+*   **🔒 Tam Gizlilik & Güvenlik:** Sadece sizin belirlediğiniz dosyaları okur. Path Traversal koruması ile sisteminizin geri kalanına dokunmaz.
+*   **🔌 Model Agnostik:** Tek bir firmaya bağımlı kalmayın. İster Google Gemini (2.5 Flash) kullanın, ister açık kaynak Hugging Face (Qwen/Llama) modellerini.
+*   **🛠️ Otomatik Dosya Yönetimi:** Kodu sadece ekrana yazmaz; sizin onayınızla dosyaları oluşturur, klasörleri açar ve mevcut dosyaları günceller.
+*   **🛡️ Otomatik Yedekleme:** Bir dosyayı değiştirmeden önce `.gassist_backups` klasörüne yedeğini alır. Hata yapma korkusu yok!
 
-    🔌 Model Agnostik: Tek bir firmaya bağımlı kalmayın. İster Google Gemini (2.5 Flash) kullanın, ister açık kaynak Hugging Face (Qwen/Llama) modellerini.
-
-    🛠️ Otomatik Dosya Yönetimi: Kodu sadece ekrana yazmaz; sizin onayınızla dosyaları oluşturur, klasörleri açar ve mevcut dosyaları günceller.
-
-    🛡️ Otomatik Yedekleme: Bir dosyayı değiştirmeden önce .gassist_backups klasörüne yedeğini alır. Hata yapma korkusu yok!
-
-🏗️ Proje Mimarisi
+## 🏗️ Proje Mimarisi
 
 Bu proje, genişletilebilir ve modüler bir yapı üzerine kurulmuştur:
 
-    assistant.py: Orkestra şefi. Kullanıcı girdisini alır, AI'ya iletir, gelen JSON yanıtını işler ve dosyaları yazar.
+*   `assistant.py`: Orkestra şefi. Kullanıcı girdisini alır, AI'ya iletir, gelen JSON yanıtını işler ve dosyaları yazar.
+*   `core/`: Farklı AI sağlayıcıları için adaptörler (Gemini, HF) burada bulunur. Yeni bir model eklemek için buraya bir dosya eklemeniz yeterlidir.
+*   `config.py`: Tüm ayarların (token limitleri, model isimleri) merkezi.
 
-    core/: Farklı AI sağlayıcıları için adaptörler (Gemini, HF) burada bulunur. Yeni bir model eklemek için buraya bir dosya eklemeniz yeterlidir.
+---
 
-    config.py: Tüm ayarların (token limitleri, model isimleri) merkezi.
-
-📦 Kurulum
+## 📦 Kurulum
 
 Projeyi bilgisayarınıza kurmak 2 dakikadan az sürer.
-1. Depoyu Klonlayın
-bash
 
+### 1. Depoyu Klonlayın
+
+```bash
 git clone https://github.com/cetincevizcetoli/coder-asistan.git
 cd coder-asistan
+```
 
-2. Sanal Ortamı Hazırlayın (Önerilen)
+### 2. Sanal Ortamı Hazırlayın (Önerilen)
 
-Sistem kütüphanelerinizi kirletmemek için sanal ortam kullanın:
-bash
+Sistem kütüphanelerinizi kirletmemek için sanal ortam kullanın.
 
-# Linux/Mac
+**Linux/Mac:**
+```bash
 python3 -m venv venv
 source venv/bin/activate
+```
 
-# Windows
-# python -m venv venv
-# venv\Scripts\activate
+**Windows:**
+```bash
+python -m venv venv
+venv\Scripts\activate
+```
 
-3. Bağımlılıkları Yükleyin
-bash
+### 3. Bağımlılıkları Yükleyin
 
+```bash
 pip install -r requirements.txt
+```
 
-4. API Anahtarlarını Tanımlayın
+### 4. API Anahtarlarını Tanımlayın
 
-Projenin çalışması için bir API anahtarına ihtiyacınız var. .env.example dosyasındaki şablonu kullanabilirsiniz.
+Projenin çalışması için bir API anahtarına ihtiyacınız var. `.env.example` dosyasındaki şablonu kullanabilirsiniz.
 
-Linux/Mac için (Kalıcı Yöntem):
-Terminale şu komutları yazarak .bashrc dosyanıza ekleyin:
-bash
+**Linux/Mac için (Kalıcı Yöntem):**
+Terminale şu komutları yazarak `.bashrc` dosyanıza ekleyin:
 
+```bash
 # Google Gemini için (Önerilen - Ücretsiz & Hızlı)
 echo 'export GOOGLE_API_KEY="Sizin_Keyiniz_Buraya"' >> ~/.bashrc
 
@@ -69,73 +73,90 @@ echo 'export GOOGLE_API_KEY="Sizin_Keyiniz_Buraya"' >> ~/.bashrc
 echo 'export HUGGINGFACE_API_KEY="Sizin_Tokeniniz_Buraya"' >> ~/.bashrc
 
 source ~/.bashrc
+```
 
-💻 Kullanım
+---
+
+## 💻 Kullanım
 
 Coder-Asistan bir CLI (Komut Satırı) aracıdır. Tüm komutlar terminal üzerinden verilir.
-Temel Komut
-bash
 
+### Temel Komut
+
+```bash
 # Ana kullanım şekli
 python assistant.py "Yapılacak işlemin tanımı"
+```
 
-Örnek Senaryolar
+### Örnek Senaryolar
 
-1. Sıfırdan Proje Başlatma:
-bash
-
+**1. Sıfırdan Proje Başlatma:**
+```bash
 python assistant.py "Basit bir Flask projesi yap. app.py, requirements.txt ve templates/index.html dosyalarını oluştur."
+```
 
-2. Mevcut Dosyayı Düzenleme:
-bash
-
+**2. Mevcut Dosyayı Düzenleme:**
+```bash
 python assistant.py "index.html dosyasını Bootstrap 5 kullanacak şekilde güncelle ve bir Navbar ekle."
+```
 
-3. Hata Ayıklama (Debug):
-bash
-
+**3. Hata Ayıklama (Debug):**
+```bash
 python assistant.py "app.py dosyasındaki hatayı bul ve düzelt."
+```
 
-⚙️ Yapılandırma (config.py)
+---
 
-Projenin davranışlarını config.py dosyasından özelleştirebilirsiniz:
+## ⚙️ Yapılandırma (config.py)
 
-    MAX_FILE_SIZE: İşlenebilecek maksimum dosya boyutu.
+Projenin davranışlarını `config.py` dosyasından özelleştirebilirsiniz:
 
-    BACKUP_DIR: Yedeklerin tutulacağı klasör.
+*   **MAX_FILE_SIZE:** İşlenebilecek maksimum dosya boyutu.
+*   **BACKUP_DIR:** Yedeklerin tutulacağı klasör.
+*   **MODEL_CONFIGS:** Kullanılan model sürümlerini buradan değiştirebilirsiniz (Örn: gemini-2.5-flash yerine pro sürümü).
 
-    MODEL_CONFIGS: Kullanılan model sürümlerini buradan değiştirebilirsiniz (Örn: gemini-2.5-flash yerine pro sürümü).
-
-🛠️ Ekstra Araçlar
+## 🛠️ Ekstra Araçlar
 
 Proje içinde, geliştirmeyi kolaylaştıran yardımcı bir script daha bulunur.
-📄 generate_docs.py (Proje Belgeleyici)
 
-Bu araç, projenizdeki tüm kod dosyalarını okur ve tek bir Markdown dosyasında (proje_dokumu.md) birleştirir.
+### 📄 generate_docs.py (Proje Belgeleyici)
 
-Neden Kullanmalıyım?
+Bu araç, projenizdeki tüm kod dosyalarını okur ve tek bir Markdown dosyasında (`proje_dokumu.md`) birleştirir.
 
-    Tüm projeyi tek bir dosyada toplayıp ChatGPT, Claude veya Gemini'ye "Bu projeyi analiz et" diyerek yapıştırmak için mükemmeldir.
+**Neden Kullanmalıyım?**
+*   Tüm projeyi tek bir dosyada toplayıp ChatGPT, Claude veya Gemini'ye "Bu projeyi analiz et" diyerek yapıştırmak için mükemmeldir.
+*   Proje yedeği almak veya dokümantasyon oluşturmak için idealdir.
 
-    Proje yedeği almak veya dokümantasyon oluşturmak için idealdir.
-
-Kullanım:
-bash
-
+**Kullanım:**
+```bash
 python generate_docs.py
+```
 
-🤝 Katkıda Bulunma
+---
+
+## 🤝 Katkıda Bulunma
 
 Pull request'ler kabul edilir! Büyük değişiklikler için önce bir Issue açarak tartışalım.
 
-    Forklayın
+1.  Forklayın
+2.  Feature branch oluşturun (`git checkout -b feature/yenilik`)
+3.  Commit leyin (`git commit -m 'Yeni özellik eklendi'`)
+4.  Push layın (`git push origin feature/yenilik`)
+5.  PR açın
 
-    Feature branch oluşturun (git checkout -b feature/yenilik)
+---
+## 🧠 Katkıda Bulunanlar & Teknoloji Yığını
 
-    Commit leyin (git commit -m 'Yeni özellik eklendi')
+Bu proje geliştirilirken aşağıdaki yapay zeka modellerinden ve açık kaynak kütüphanelerden güç alınmıştır:
 
-    Push layın (git push origin feature/yenilik)
+### 🤖 Yapay Zeka (AI)
+*   **Google Gemini (2.5 Flash):** Projenin ana mantıksal motoru ve kod üreticisi.
+*   **Hugging Face (Qwen/Llama):** Açık kaynak model entegrasyonu ve alternatif zeka.
 
-    PR açın
+### 🛠️ Altyapı & Kütüphaneler
+*   **Python 3.8+:** Ana geliştirme dili.
+*   **Google GenAI SDK:** Gemini API bağlantısı.
 
-Geliştirici: Ahmet Çetin (cetincevizcetoli)
+---
+**Geliştirici:** Ahmet Çetin (cetincevizcetoli)
+)
