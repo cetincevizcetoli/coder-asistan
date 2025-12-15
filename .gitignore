@@ -1,0 +1,16 @@
+# Sanal Ortamlar
+gemini_venv/
+venv/
+env/
+__pycache__/
+*.pyc
+
+# Proje Yedekleri ve Loglar
+.gassist_backups/
+.gassist_history.log
+
+# Sistem Dosyaları
+.DS_Store
+
+# Gizli Anahtarlar (Varsa)
+.env
