@@ -115,6 +115,20 @@ Projenin davranışlarını `config.py` dosyasından özelleştirebilirsiniz:
 *   **BACKUP_DIR:** Yedeklerin tutulacağı klasör.
 *   **MODEL_CONFIGS:** Kullanılan model sürümlerini buradan değiştirebilirsiniz (Örn: gemini-2.5-flash yerine pro sürümü).
 
+### 🎛️ Gelişmiş Parametreler
+
+**1. `--dry-run` (Prova Modu / Güvenli Mod)**
+Kodu oluşturur, planı gösterir ama **dosyalara yazmaz**. Değişiklikleri kaydetmeden önce görmek için idealdir.
+```bash
+python assistant.py "Snake oyunu yaz" --dry-run
+```
+--
+
+verbose (Detaylı Log Modu) "Geveze" modudur. AI'dan gelen ham yanıtı, JSON temizleme sürecini ve olası gizli hataları detaylı gösterir. Hata ayıklamak (debug) için kullanılır.
+
+```bash
+python assistant.py "Hata veren bir dosya üzerinde çalış" --verbose
+```
 ## 🛠️ Ekstra Araçlar
 
 Proje içinde, geliştirmeyi kolaylaştıran yardımcı bir script daha bulunur.
@@ -159,4 +173,3 @@ Bu proje geliştirilirken aşağıdaki yapay zeka modellerinden ve açık kaynak
 
 ---
 **Geliştirici:** Ahmet Çetin (cetincevizcetoli)
-)
