@@ -1,4 +1,4 @@
-# assistant.py (MODÜLER ÇEKİRDEK)
+# assistant.py
 import sys
 import os
 import re
@@ -7,271 +7,138 @@ import shutil
 import glob
 from datetime import datetime
 
-# Modül importları (Gemini ve diğer modelleri buraya ekleyeceğiz)
+# YENİ MODÜLLER
+from config import *
+from model_selector import select_model_interactive
 from core.base import ModelAPIError
-from core.gemini import GeminiModel 
 
-# --- KONSTANTLAR ve YAPILANDIRMA ---
-FILE_PATH_PATTERN = re.compile(r'\b[\w./-]+\.(py|js|html|css|md|json|txt|java|cpp|h|ts|jsx|tsx|sh)\b', re.IGNORECASE)
-MAX_FILE_SIZE = 5_242_880  # 5MB
-MAX_TOTAL_SIZE = 20_971_520 # 20MB
-BACKUP_DIR = ".gassist_backups"
-HISTORY_LOG = ".gassist_history.log"
-MAX_BACKUPS_PER_FILE = 10 
-
-# Renkli Terminal Çıktısı
-class Colors:
-    GREEN = '\033[92m'
-    RED = '\033[91m'
-    YELLOW = '\033[93m'
-    BLUE = '\033[94m'
-    RESET = '\033[0m'
-    
-DRY_RUN = False
+FILE_PATH_PATTERN = re.compile(r'\b[\w./-]+\.(py|js|html|css|md|json|txt|java|cpp|h|ts|jsx|tsx|sh|sql)\b', re.IGNORECASE)
 VERBOSE = False
+DRY_RUN = False
 
-# Kullanılabilir Model Sınıfları Sözlüğü
-AVAILABLE_MODELS = {
-    "1": GeminiModel,
-}
+# --- YARDIMCI FONKSİYONLAR ---
+def clean_json_string(json_str):
+    """
+    AI'dan gelen kirli JSON string'ini temizler ve parse edilebilir hale getirir.
+    """
+    if not json_str: return ""
 
-# Hugging Face modelini güvenli bir şekilde yükleme denemesi
-try:
-    from core.huggingface import HuggingFaceModel
-    AVAILABLE_MODELS["2"] = HuggingFaceModel
-except ImportError as e:
-    print(f"{Colors.YELLOW}⚠️ Uyarı: Hugging Face modeli yüklenemedi. Detay: {e}{Colors.RESET}")
-    print(f"{Colors.YELLOW}   Lütfen 'pip install requests' komutunu çalıştırdığınızdan emin olun.{Colors.RESET}")
-except Exception as e:
-    print(f"{Colors.YELLOW}⚠️ Uyarı: Hugging Face modülünde beklenmeyen hata: {e}{Colors.RESET}")
+    # 1. Markdown kod bloklarını temizle (```json ... ```)
+    json_str = re.sub(r'^```json\s*', '', json_str, flags=re.MULTILINE)
+    json_str = re.sub(r'^```\s*', '', json_str, flags=re.MULTILINE)
+    json_str = re.sub(r'```\s*$', '', json_str, flags=re.MULTILINE)
 
-# --- GÜVENLİK ve UTILITY FONKSİYONLARI ---
-# (is_safe_path, backup_if_exists, log_command fonksiyonları aynı kalır)
+    # 2. Görünmez ve bozuk karakterleri temizle
+    json_str = json_str.replace('\u00ad', '') # Soft hyphen
+    json_str = json_str.replace('\u200b', '') # Zero width space
+    
+    # 3. JSON'un başındaki ve sonundaki fazlalıkları at (Örn: "İşte JSON:" gibi yazılar)
+    # İlk '{' karakterini bul
+    start_idx = json_str.find('{')
+    # Son '}' karakterini bul
+    end_idx = json_str.rfind('}')
+
+    if start_idx != -1 and end_idx != -1:
+        json_str = json_str[start_idx : end_idx + 1]
+
+    return json_str.strip()
 
 def is_safe_path(file_path, current_directory):
     if os.path.isabs(file_path): return False
-    normalized_path = os.path.normpath(file_path)
-    if normalized_path.startswith('..'): return False
-    full_path = os.path.join(current_directory, file_path)
-    real_path = os.path.realpath(full_path) 
-    if not real_path.startswith(current_directory): return False
-    return True
+    if file_path.startswith('..'): return False
+    full_path = os.path.realpath(os.path.join(current_directory, file_path))
+    return full_path.startswith(current_directory)
 
 def backup_if_exists(full_path):
-    if os.path.exists(full_path) and os.path.isfile(full_path):
+    if os.path.exists(full_path):
         os.makedirs(BACKUP_DIR, exist_ok=True)
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        backup_name = f"{os.path.basename(full_path)}.{timestamp}.backup"
-        backup_path = os.path.join(BACKUP_DIR, backup_name)
-        try:
-            shutil.copy(full_path, backup_path)
-        except Exception as e:
-            print(f"{Colors.YELLOW}⚠️ Yedekleme Hatası: {os.path.basename(full_path)} yedeklenemedi. Detay: {e}{Colors.RESET}")
-            return None
-        pattern = os.path.join(BACKUP_DIR, f"{os.path.basename(full_path)}.*.backup")
-        backups = sorted(glob.glob(pattern))
-        if len(backups) > MAX_BACKUPS_PER_FILE:
-            for old_backup in backups[:len(backups) - MAX_BACKUPS_PER_FILE]:
-                os.remove(old_backup)
-                if VERBOSE:
-                     print(f"{Colors.YELLOW}   🗑️ Eski yedek silindi: {os.path.basename(old_backup)}{Colors.RESET}")
-        return backup_path
+        backup_name = f"{os.path.basename(full_path)}.{timestamp}.bak"
+        shutil.copy(full_path, os.path.join(BACKUP_DIR, backup_name))
+        return backup_name
     return None
 
-def log_command(prompt, files_saved_names):
-    with open(HISTORY_LOG, 'a', encoding='utf-8') as f:
-        f.write(f"\n{'='*60}\n")
-        f.write(f"Tarih: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write(f"Komut: {prompt[:100]}...\n")
-        f.write(f"Sonuç: {len(files_saved_names)} dosya oluşturuldu/güncellendi: {', '.join(files_saved_names)}\n")
-
-# --- YENİ: MODEL SEÇİMİ ---
-def get_model_choice():
-    """Kullanıcıya hangi modelin kullanılacağını sorar."""
-    print(f"\n{Colors.BLUE}--- MEVCUT AI MODELLERİ ---{Colors.RESET}")
-    for key, model_class in AVAILABLE_MODELS.items():
-        print(f"  [{key}] {model_class.MODEL_NAME}")
-    
-    while True:
-        choice = input(f"{Colors.YELLOW}Kullanılacak modeli seçin (Örn: 1):{Colors.RESET} ").strip()
-        if choice in AVAILABLE_MODELS:
-            try:
-                # Seçilen modelin istemcisini başlat
-                model_instance = AVAILABLE_MODELS[choice]()
-                print(f"{Colors.GREEN}✨ Model seçildi: {model_instance.MODEL_NAME}{Colors.RESET}")
-                return model_instance
-            except ModelAPIError as e:
-                print(f"{Colors.RED}Model Hatası: {e}{Colors.RESET}")
-                print(f"{Colors.YELLOW}Lütfen API anahtarınızı veya ayarlarınızı kontrol edin.{Colors.RESET}")
-                continue
-        else:
-            print(f"{Colors.YELLOW}Geçersiz seçim. Lütfen listeden bir sayı girin.{Colors.RESET}")
-
-# --- ANA FONKSİYON ---
-def get_assistant_response_and_save(prompt_text, model_instance):
+def main_process(prompt_text, model_instance):
     current_directory = os.getcwd()
-    files_to_read = []
     
-    # ... (1. ve 2. Adımlar: Dosya Okuma ve Prompt Hazırlama aynı kalır)
-    potential_files = FILE_PATH_PATTERN.findall(prompt_text)
-    
-    for file_match in potential_files:
-        file_path = file_match[0]
-        full_path = os.path.join(current_directory, file_path)
-        if os.path.exists(full_path) and os.path.isfile(full_path):
-            try:
-                with open(full_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                files_to_read.append(f"----- {file_path} -----\n{content}\n")
-            except Exception as e:
-                print(f"{Colors.YELLOW}Uyarı: '{file_path}' dosyası okunamadı. ({e}){Colors.RESET}")
+    # 1. Dosya Okuma (Context)
+    files_context = ""
+    found_files = FILE_PATH_PATTERN.findall(prompt_text)
+    for fname in found_files:
+        path = os.path.join(current_directory, fname)
+        if os.path.exists(path):
+            with open(path, 'r', encoding='utf-8') as f:
+                files_context += f"\n--- DOSYA: {fname} ---\n{f.read()}\n"
 
-    context = "\n".join(files_to_read)
-    if context:
-        prompt_text = f"Aşağıdaki mevcut dosya içeriğini ve yapısını dikkate alarak görevi tamamla:\n\n{context}\n\n--- YENİ GÖREV ---\n{prompt_text}"
-        
-    system_instruction = (
-        "Sen gelişmiş bir Proje Yöneticisi Yapay Zekasın. "
-        "Görevin, istenen dosya yapısını (oluşturma/güncelleme) sağlamaktır. "
-        "Yanıtın SADECE, dosya yollarını (klasör dahil) anahtar, dosya içeriğini ise değer olarak içeren tek bir JSON sözlüğü olmalıdır. "
-        "Dosya yolları göreceli olmalıdır (örn: 'src/config.py')."
-        
-        "\nÇOK ÖNEMLİ: JSON içeriğinde (değerlerde), JSON ayrıştırıcısını bozan özel karakterler veya kaçış dizileri kullanma. Tüm metin UTF-8 uyumlu olmalıdır. Tüm çıktıyı tek bir ```json ... ``` bloğunda ver."
-        
-        "\nÖRNEK JSON FORMATI: {'dosya/yolu.py': 'kod içeriği', 'README.md': 'metin içeriği'}"
-    )
+    full_prompt = f"MEVCUT PROJE DOSYALARI:\n{files_context}\n\nKULLANICI İSTEĞİ:\n{prompt_text}"
     
-    print(f"{Colors.BLUE}✅ GÖREV ALINDI:{Colors.RESET} {prompt_text.splitlines()[-1][:70]}...")
-
+    print(f"{Colors.BLUE}⏳ {model_instance.MODEL_NAME} düşünüyor...{Colors.RESET}")
+    
     try:
-        # API çağrısı, seçilen model örneği üzerinden yapılır
-        full_response_text = model_instance.generate_content(
-            system_instruction=system_instruction,
-            prompt_text=prompt_text
-        )
+        # AI'dan yanıt al
+        raw_response = model_instance.generate_content(SYSTEM_INSTRUCTION, full_prompt)
         
-        # 3. JSON Çıktısını Güvenli Şekilde Ayıkla ve Ayrıştır
-        json_match = re.search(r"```json\n(.*?)```", full_response_text, re.DOTALL)
+        # JSON Temizle
+        clean_response = clean_json_string(raw_response)
         
-        if json_match:
-            json_string = json_match.group(1).strip()
-            if VERBOSE: print(f"{Colors.YELLOW}DEBUG: JSON Markdown bloğu başarıyla ayrıştırıldı.{Colors.RESET}")
-        else:
-            print(f"{Colors.YELLOW}⚠️ Uyarı: Yanıtta beklenen JSON Markdown bloğu bulunamadı. Tam metinden ayrıştırma deneniyor...{Colors.RESET}")
-            json_string = full_response_text.strip()
-            
-        # JSON yüklenirken hata yakalama
+        if VERBOSE:
+            print(f"{Colors.YELLOW}[DEBUG] Ham Yanıt:\n{raw_response}{Colors.RESET}")
+            print(f"{Colors.CYAN}[DEBUG] Temiz Yanıt:\n{clean_response}{Colors.RESET}")
+
+        # JSON Parse Et
         try:
-            json_string = json_string.replace('\u00ad', '').replace('\u200b', '').strip()
-            file_map = json.loads(json_string)
-            
+            file_changes = json.loads(clean_response)
         except json.JSONDecodeError as e:
-            # ... (JSON Hata işleme aynı kalır)
-            print(f"{Colors.RED}--- JSON ÇÖZÜMLEME HATASI ---{Colors.RESET}")
-            print(f"{Colors.RED}AI, geçerli bir JSON formatı döndüremedi. Detay: {e}{Colors.RESET}")
-            print(f"{Colors.YELLOW}İPUCU: Hata, genellikle README.md gibi çok satırlı metinlerdeki hatalı kaçış karakterlerinden kaynaklanır.{Colors.RESET}")
-            raise e
-            
-        # ... (4, 5, 6, 7. Adımlar: Ön Kontrol, Onay, Kayıt ve Loglama aynı kalır)
-        files_to_save = {}
-        total_size = 0
-        
-        if not isinstance(file_map, dict):
-             raise ValueError(f"{Colors.RED}AI, sözlük formatında (JSON Object) yanıt vermedi.{Colors.RESET}")
-             
-        for file_path, content in file_map.items():
-            content_str = str(content).strip()
-            content_size = len(content_str.encode('utf-8'))
-            
-            if not is_safe_path(file_path, current_directory):
-                print(f"{Colors.RED}🚨 GÜVENLİK UYARISI: Şüpheli yol engellendi: {file_path}{Colors.RESET}")
-                continue
-            
-            if content_size > MAX_FILE_SIZE:
-                print(f"{Colors.YELLOW}⚠️ {file_path} çok büyük ({content_size/1024/1024:.2f}MB), atlanıyor (Limit: {MAX_FILE_SIZE/1024/1024:.2f}MB).{Colors.RESET}")
-                continue
-                
-            total_size += content_size
-            if total_size > MAX_TOTAL_SIZE:
-                print(f"{Colors.YELLOW}⚠️ Toplam dosya boyutu limitini aştı ({total_size/1024/1024:.2f}MB). Kalan dosyalar atlanıyor.{Colors.RESET}")
-                break
+            print(f"{Colors.RED}❌ JSON Ayrıştırma Hatası! AI bozuk format döndürdü.{Colors.RESET}")
+            print(f"Hata detayı: {e}")
+            return
 
-            files_to_save[file_path] = content_str
-        
-        if not files_to_save:
-             print("\nİşlem yapılacak dosya bulunamadı. İptal edildi.")
-             return
-             
-        print("\n📋 OLUŞTURULACAK/GÜNCELLENECEK DOSYALAR:")
-        for file_path, content in files_to_save.items():
-             print(f"{Colors.BLUE}   - {file_path} ({len(content)} karakter, Boyut: {len(content.encode('utf-8'))/1024:.2f} KB){Colors.RESET}")
-             
-        if DRY_RUN:
-             print(f"\n{Colors.YELLOW}🧪 [DRY-RUN MODU AKTİF] Dosyalar kaydedilmeyecek, sadece gösterildi.{Colors.RESET}")
-             return
-             
-        confirm = input(f"\nDevam edilsin mi? (e/h): {Colors.YELLOW}").lower()
-        print(Colors.RESET, end="") 
-        if confirm != 'e':
-             print(f"{Colors.YELLOW}İşlem kullanıcı tarafından iptal edildi.{Colors.RESET}")
-             return
-             
-        files_saved_names = []
-        for file_path, content in files_to_save.items():
-            full_path = os.path.join(current_directory, file_path)
-            
-            target_dir = os.path.dirname(full_path)
-            if target_dir and not os.path.exists(target_dir):
-                os.makedirs(target_dir, exist_ok=True)
-            
-            backup_path = backup_if_exists(full_path)
-            if backup_path:
-                print(f"{Colors.GREEN}   📦 Yedeklendi: {os.path.basename(backup_path)}{Colors.RESET}")
+        # Dosyaları Yaz
+        print(f"\n{Colors.BOLD}Planlanan Değişiklikler:{Colors.RESET}")
+        for path, content in file_changes.items():
+            print(f" 📄 {path}")
 
-            with open(full_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-                
-            print(f"{Colors.GREEN}   -> KAYDEDİLDİ/GÜNCELLENDİ: {file_path}{Colors.RESET}")
-            files_saved_names.append(file_path)
-            
-        print(f"\n{Colors.GREEN}✨ BAŞARILI: Toplam {len(files_saved_names)} dosya oluşturuldu/güncellendi.{Colors.RESET}")
-        
-        log_command(prompt_text, files_saved_names)
+        if not DRY_RUN:
+            confirm = input(f"\n{Colors.YELLOW}Onaylıyor musunuz? (e/h): {Colors.RESET}").lower()
+            if confirm == 'e':
+                for path, content in file_changes.items():
+                    full_path = os.path.join(current_directory, path)
+                    
+                    if not is_safe_path(path, current_directory):
+                        print(f"{Colors.RED}⛔ Güvenlik Uyarısı: {path} atlandı.{Colors.RESET}")
+                        continue
+                        
+                    # Klasör oluştur
+                    os.makedirs(os.path.dirname(full_path), exist_ok=True)
+                    
+                    # Yedekle
+                    backup_if_exists(full_path)
+                    
+                    # Yaz
+                    with open(full_path, 'w', encoding='utf-8') as f:
+                        f.write(content)
+                    print(f"{Colors.GREEN}✅ Kaydedildi: {path}{Colors.RESET}")
+            else:
+                print("İptal edildi.")
 
-
-    # YENİ HATA YAKALAMA BLOKLARI (Modül üzerinden gelen hataları yakalar)
     except ModelAPIError as e:
-        print(f"\n{Colors.RED}--- KRİTİK API HATASI ---{Colors.RESET}")
-        print(f"{Colors.RED}API İletişim Hatası: {e}{Colors.RESET}")
-        
+        print(f"{Colors.RED}⚡ API Hatası: {e}{Colors.RESET}")
     except Exception as e:
-        if 'full_response_text' in locals() and full_response_text:
-             print(f"\n{Colors.YELLOW}--- AI YANITI (HATA AYIKLAMA İÇİN) ---{Colors.RESET}")
-             print(full_response_text)
-             print("------------------------------------------")
-        else:
-             print(f"\n{Colors.RED}--- KRİTİK HATA ---{Colors.RESET}")
+        print(f"{Colors.RED}🔥 Beklenmeyen Hata: {e}{Colors.RESET}")
 
-        print(f"{Colors.RED}❌ BEKLENMEYEN HATA: Proje kaydı başarısız oldu. Detay: {e}{Colors.RESET}")
-
-# --- ANA ÇALIŞMA BLOĞU ---
 if __name__ == "__main__":
-    
-    if "--dry-run" in sys.argv:
-        DRY_RUN = True
-        sys.argv.remove("--dry-run")
     if "--verbose" in sys.argv:
         VERBOSE = True
         sys.argv.remove("--verbose")
-
+    
     if len(sys.argv) < 2:
-        print(f"{Colors.YELLOW}Kullanım:{Colors.RESET} gassist \"[Göreviniz Buraya]\" [--dry-run] [--verbose]")
-        print(f"{Colors.YELLOW}Örnek:{Colors.RESET} gassist \"src/app.js ve index.html oluştur.\" --dry-run")
+        print(f"Kullanım: python assistant.py \"görev tanımı\"")
         sys.exit(1)
+
+    prompt = " ".join(sys.argv[1:])
     
-    gorev_prompt = " ".join(sys.argv[1:]) 
+    # Yeni Seçici
+    model = select_model_interactive()
     
-    # Yeni: Modeli Seç
-    selected_model = get_model_choice()
-    
-    get_assistant_response_and_save(gorev_prompt, selected_model)
+    if model:
+        main_process(prompt, model)
