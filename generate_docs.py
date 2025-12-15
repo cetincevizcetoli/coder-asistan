@@ -5,7 +5,8 @@ import sys
 DIKKATE_ALINMAYACAK_DIZINLER = [
     '.git', '__pycache__', 'venv', '.venv', 'env', '.env', 'node_modules', 
     '.vscode', '.idea', 'dist', 'build', 'target', 'bin',
-    '__macosx', '.ds_store', 'logs', 'site-packages', 'lib', 'include'
+    '__macosx', '.ds_store', 'logs', 'site-packages', 'lib', 'include',
+    '.gassist_backups' # Yedekleri de dahil etmeyelim
 ]
 
 # İçeriği döküme eklenecek kod uzantıları
@@ -44,18 +45,12 @@ def dizin_yapisi_getir(hedef_dizin):
     """Verilen yoldan başlayarak dizin yapısını döndürür."""
     yapı = "### 📂 Proje Dizin Yapısı ve Dosyalar\n\n"
     
-    # Sadece hedef dizin (bulunduğumuz yer) ve altındakilere bak
     for kok, dizinler, dosyalar in os.walk(hedef_dizin):
-        
-        # Yasaklı klasörlere girmeyi engelle
         dizinler[:] = [d for d in dizinler if d.lower() not in DIKKATE_ALINMAYACAK_DIZINLER]
-
-        # Yol içinde yasaklı bir klasör varsa atla
         yol_parcalari = kok.lower().split(os.sep)
         if any(yasak in yol_parcalari for yasak in DIKKATE_ALINMAYACAK_DIZINLER):
             continue
 
-        # Göreli yol (Proje köküne göre)
         goreli_yol = os.path.relpath(kok, hedef_dizin)
         
         if goreli_yol == '.':
@@ -72,16 +67,10 @@ def dizin_yapisi_getir(hedef_dizin):
             if dosya != CIKTI_DOSYASI and dosya != os.path.basename(__file__):
                 if not dosya.startswith('.'):
                     yapı += f"{girinti_dosya}- {dosya}\n"
-                elif os.path.splitext(dosya)[1].lower() in ['.gitignore', '.env']: 
-                     yapı += f"{girinti_dosya}- {dosya}\n"
                     
     return yapı
 
 def ana_fonksiyon():
-    """Ana program akışını yönetir."""
-    
-    # DÜZELTME: Artık üst dizine (pardir) gitmiyoruz.
-    # Doğrudan betiğin çalıştığı dizini (cwd) hedef alıyoruz.
     hedef_dizin = os.getcwd() 
     proje_adi = os.path.basename(hedef_dizin)
     
@@ -97,61 +86,30 @@ def ana_fonksiyon():
     print("2/3: Kod içerikleri toplanıyor...")
     
     dosya_sayisi = 0
-    
     for kok, dizinler, dosyalar in os.walk(hedef_dizin):
-        
-        # Yasaklı klasörlere girme
         dizinler[:] = [d for d in dizinler if d.lower() not in DIKKATE_ALINMAYACAK_DIZINLER]
-        
-        # Yasaklı yoldaysan atla
         yol_parcalari = kok.lower().split(os.sep)
-        if any(yasak in yol_parcalari for yasak in DIKKATE_ALINMAYACAK_DIZINLER):
-            continue
+        if any(yasak in yol_parcalari for yasak in DIKKATE_ALINMAYACAK_DIZINLER): continue
 
         for dosya in sorted(dosyalar):
             dosya_yolu = os.path.join(kok, dosya)
-            
-            if dosya == CIKTI_DOSYASI or dosya == os.path.basename(__file__):
-                continue
-
+            if dosya == CIKTI_DOSYASI or dosya == os.path.basename(__file__): continue
             uzanti = os.path.splitext(dosya)[1].lower()
 
-            # Kod dosyası ise içeriği al
             if uzanti in BELGELENECEK_KOD_UZANTILARI:
                 goreli_yol = os.path.relpath(dosya_yolu, hedef_dizin)
                 dokum_metni += f"\n#### 📄 Dosya: `{goreli_yol}`\n"
-                icerik = dosya_icerigini_getir(dosya_yolu)
-                dokum_metni += icerik
+                dokum_metni += dosya_icerigini_getir(dosya_yolu)
                 dosya_sayisi += 1
             
-            # İsim listelenecekler (İçerik yok)
-            elif uzanti in SADECE_ISIM_LISTELENECEK_UZANTILAR:
-                continue
-            
-            # Bilinmeyen uzantı sorusu
-            elif uzanti and uzanti not in ['.ds_store', '.gitkeep', '.bin', '.exe', '.obj', '.dll', '.zip', '.rar', '.jpg', '.jpeg', '.png', '.gif', '.ico', '.pdf', '.doc', '.docx', '.pptx', '.xlsx', '.pyc']:
-                soru = f"⚠️ Bilinmeyen uzantı '{uzanti}' bulundu: {os.path.relpath(dosya_yolu, hedef_dizin)}\n   İçeriği eklemek ister misiniz? (e/h): "
-                yanit = input(soru).lower()
-                
-                if yanit in ['e', 'evet']:
-                    goreli_yol = os.path.relpath(dosya_yolu, hedef_dizin)
-                    dokum_metni += f"\n#### 📄 Dosya: `{goreli_yol}` (Soru Üzerine Eklendi)\n"
-                    icerik = dosya_icerigini_getir(dosya_yolu)
-                    dokum_metni += icerik
-                    dosya_sayisi += 1
-
     print(f"3/3: '{CIKTI_DOSYASI}' dosyasına kayıt yapılıyor...")
     try:
         cikti_yolu = os.path.join(hedef_dizin, CIKTI_DOSYASI)
         with open(cikti_yolu, 'w', encoding='utf-8') as f:
             f.write(dokum_metni)
-        
-        print(f"\n✅ İşlem Başarılı!")
-        print(f"Toplam {dosya_sayisi} kod dosyası belgelendi.")
-        print(f"Döküm dosyası: {cikti_yolu}")
-
+        print(f"\n✅ İşlem Başarılı! Toplam {dosya_sayisi} dosya belgelendi.")
     except Exception as e:
-        print(f"\n❌ Döküm dosyası yazılırken bir hata oluştu: {e}")
+        print(f"\n❌ Hata: {e}")
         
 if __name__ == "__main__":
     ana_fonksiyon()

@@ -125,6 +125,22 @@ Projenin davranışlarını `config.py` dosyasından özelleştirebilirsiniz:
 * `MODEL_CONFIGS`: Kullanılan model sürümlerini buradan değiştirebilirsiniz (Örn: gemini-2.5-flash yerine pro sürümü).
 
 ---
+## 🛠️ Ekstra Araçlar
+
+Proje içinde, geliştirmeyi kolaylaştıran yardımcı bir script daha bulunur.
+
+### 📄 `generate_docs.py` (Proje Belgeleyici)
+Bu araç, projenizdeki tüm kod dosyalarını okur ve tek bir Markdown dosyasında (`proje_dokumu.md`) birleştirir. 
+
+**Neden Kullanmalıyım?**
+* Tüm projeyi tek bir dosyada toplayıp ChatGPT, Claude veya Gemini'ye "Bu projeyi analiz et" diyerek yapıştırmak için mükemmeldir.
+* Proje yedeği almak veya dokümantasyon oluşturmak için idealdir.
+
+**Kullanım:**
+```bash
+python generate_docs.py
+
+---
 
 ## 🤝 Katkıda Bulunma
 Pull request'ler kabul edilir! Büyük değişiklikler için önce bir Issue açarak tartışalım.

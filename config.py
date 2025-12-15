@@ -1,7 +1,8 @@
-# config.py
 import os
 
-# --- RENKLER ---
+# ==========================================
+# 🎨 RENK AYARLARI (Terminal Çıktısı İçin)
+# ==========================================
 class Colors:
     GREEN = '\033[92m'
     RED = '\033[91m'
@@ -11,19 +12,25 @@ class Colors:
     BOLD = '\033[1m'
     RESET = '\033[0m'
 
-# --- DOSYA AYARLARI ---
-MAX_FILE_SIZE = 5 * 1024 * 1024
-MAX_TOTAL_SIZE = 20 * 1024 * 1024
-BACKUP_DIR = ".gassist_backups"
-HISTORY_LOG = ".gassist_history.log"
-MAX_BACKUPS_PER_FILE = 10
+# ==========================================
+# ⚙️ SİSTEM VE DOSYA AYARLARI
+# ==========================================
+# Dosya okuma/yazma limitleri (Sihirli sayılar burada toplandı)
+MAX_FILE_SIZE = 5 * 1024 * 1024        # 5 MB (Tek dosya limiti)
+MAX_TOTAL_SIZE = 20 * 1024 * 1024      # 20 MB (Toplam proje okuma limiti)
+BACKUP_DIR = ".gassist_backups"        # Yedekleme klasörü
+HISTORY_LOG = ".gassist_history.log"   # Log dosyası
+MAX_BACKUPS_PER_FILE = 10              # Bir dosya için tutulacak max yedek
 
-# --- MODEL AYARLARI ---
+# ==========================================
+# 🤖 MODEL AYARLARI (Deklarasyon)
+# ==========================================
+# Not: API Anahtarları (Secret) burada değil, os.getenv ile çekilecek.
 MODEL_CONFIGS = {
     "gemini": {
         "env_var": "GOOGLE_API_KEY",
-        "model_name": "gemini-2.5-flash", # En standart isim
-        "display_name": "gemini-2.5-flash"
+        "model_name": "gemini-2.5-flash",  # En güncel, hızlı model
+        "display_name": "Google Gemini (2.5 Flash)"
     },
     "huggingface": {
         "env_var": "HUGGINGFACE_API_KEY",
@@ -32,7 +39,9 @@ MODEL_CONFIGS = {
     }
 }
 
-# --- SYSTEM PROMPT ---
+# ==========================================
+# 🧠 AI SİSTEM TALİMATI (System Prompt)
+# ==========================================
 SYSTEM_INSTRUCTION = (
     "Sen uzman bir yazılım mimarı ve kodlama asistanısın. "
     "Görevin: Verilen talimatlara göre dosya yapısını oluşturmak veya güncellemektir.\n"
