@@ -19,7 +19,12 @@ try:
     GROQ_AVAILABLE = True
 except ImportError:
     GROQ_AVAILABLE = False
-
+# --- IMPORT: DEEPSEEK (Yeni) ---
+try:
+    from core.deepseek import DeepSeekModel
+    DEEPSEEK_AVAILABLE = True
+except ImportError:
+    DEEPSEEK_AVAILABLE = False
 # --- IMPORT: HUGGING FACE (Opsiyonel) ---
 try:
     from core.huggingface import HuggingFaceModel
@@ -49,8 +54,12 @@ def get_model_choice():
     if HF_AVAILABLE:
         print(f"  [3] {MODEL_CONFIGS['huggingface']['display_name']}")
     
+    # DeepSeek seçeneği ekleyin
+    if DEEPSEEK_AVAILABLE:
+        print(f"  [4] {MODEL_CONFIGS['deepseek']['display_name']}")
+    
     while True:
-        choice = input(f"\n{Colors.YELLOW}Seçiminiz (1/2/3): {Colors.RESET}").strip()
+        choice = input(f"\n{Colors.YELLOW}Seçiminiz (1/2/3/4): {Colors.RESET}").strip()
         
         if choice == "1":
             try:
@@ -69,6 +78,13 @@ def get_model_choice():
                 return HuggingFaceModel()
             except Exception as e:
                 print(f"{Colors.RED}Hugging Face Başlatılamadı: {e}{Colors.RESET}")
+        
+        # DeepSeek seçeneği ekleyin
+        elif choice == "4" and DEEPSEEK_AVAILABLE:
+            try:
+                return DeepSeekModel()
+            except Exception as e:
+                print(f"{Colors.RED}DeepSeek Başlatılamadı: {e}{Colors.RESET}")
         else:
             print(f"{Colors.RED}Geçersiz seçim veya model hazır değil.{Colors.RESET}")
 

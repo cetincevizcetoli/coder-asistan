@@ -7,6 +7,7 @@ Bu döküm, **D:\projects\coder-asistan** dizini (mevcut klasör) ve altındakil
 - **coder-asistan/** (Proje Kökü)
   - assistant.py
   - check_models.py
+  - claude_oneri.txt
   - config.py
   - index.html
   - model_selector.py
@@ -16,6 +17,7 @@ Bu döküm, **D:\projects\coder-asistan** dizini (mevcut klasör) ve altındakil
   - **core/**
     - base.py
     - gemini.py
+    - groq.py
     - huggingface.py
 
 ---
@@ -40,6 +42,13 @@ from config import Colors, MODEL_CONFIGS
 from core.base import ModelAPIError
 from core.gemini import GeminiModel 
 
+# --- IMPORT: GROQ (Yeni) ---
+try:
+    from core.groq import GroqModel
+    GROQ_AVAILABLE = True
+except ImportError:
+    GROQ_AVAILABLE = False
+
 # --- IMPORT: HUGGING FACE (Opsiyonel) ---
 try:
     from core.huggingface import HuggingFaceModel
@@ -54,14 +63,23 @@ VERBOSE = False
 
 # --- MODEL SEÇİCİ ---
 def get_model_choice():
-    """Kullanıcıya model seçtirir ve örneği döndürür."""
-    print(f"\n{Colors.BLUE}--- AI MODEL SEÇİMİ ---{Colors.RESET}")
+    """Kullanıcıya model seçtirir."""
+    print(f"\n{Colors.BLUE}╔═══════════════════════════════╗")
+    print(f"║   🤖 AI MODEL SEÇİMİ          ║")
+    print(f"╚═══════════════════════════════╝{Colors.RESET}\n")
+    
     print(f"  [1] {MODEL_CONFIGS['gemini']['display_name']}")
+    
+    if GROQ_AVAILABLE:
+        print(f"  [2] {MODEL_CONFIGS['groq']['display_name']}")
+    else:
+        print(f"  [2] Groq (API Key Eksik - ÜCRETSİZ!)")
+    
     if HF_AVAILABLE:
-        print(f"  [2] {MODEL_CONFIGS['huggingface']['display_name']}")
+        print(f"  [3] {MODEL_CONFIGS['huggingface']['display_name']}")
     
     while True:
-        choice = input(f"{Colors.YELLOW}Seçiminiz (1/2): {Colors.RESET}").strip()
+        choice = input(f"\n{Colors.YELLOW}Seçiminiz (1/2/3): {Colors.RESET}").strip()
         
         if choice == "1":
             try:
@@ -69,13 +87,19 @@ def get_model_choice():
             except Exception as e:
                 print(f"{Colors.RED}Gemini Başlatılamadı: {e}{Colors.RESET}")
         
-        elif choice == "2" and HF_AVAILABLE:
+        elif choice == "2" and GROQ_AVAILABLE:
+            try:
+                return GroqModel()
+            except Exception as e:
+                print(f"{Colors.RED}Groq Başlatılamadı: {e}{Colors.RESET}")
+        
+        elif choice == "3" and HF_AVAILABLE:
             try:
                 return HuggingFaceModel()
             except Exception as e:
                 print(f"{Colors.RED}Hugging Face Başlatılamadı: {e}{Colors.RESET}")
         else:
-            print(f"{Colors.RED}Geçersiz seçim.{Colors.RESET}")
+            print(f"{Colors.RED}Geçersiz seçim veya model hazır değil.{Colors.RESET}")
 
 # --- YARDIMCI FONKSİYONLAR ---
 
@@ -118,6 +142,7 @@ def clean_json_string(json_str: str) -> str:
     """AI yanıtını temiz JSON formatına sokar."""
     # Markdown bloklarını temizle
     if "```" in json_str:
+        # Kod bloklarını kaldırırken (```json ... ```) veya sadece (```)
         json_str = re.sub(r"```json\n?|```", "", json_str)
     
     # Görünmez karakterleri temizle
@@ -127,7 +152,6 @@ def clean_json_string(json_str: str) -> str:
 def read_context_files(file_paths: List[str], current_dir: str) -> str:
     """
     Belirtilen dosyaları okur ve AI için bağlam oluşturur.
-    Performans için String Concatenation yerine Liste kullanır.
     """
     context_parts = []
     total_size = 0
@@ -194,6 +218,7 @@ def main_process(prompt_text: str, model_instance: Any):
         except json.JSONDecodeError:
             # Bazen AI tek tırnak kullanıyor, düzeltmeyi dene
             try:
+                # Tek tırnakları çift tırnağa çevirme denemesi
                 file_changes = json.loads(clean_response.replace("'", '"'))
             except:
                 print(f"{Colors.RED}❌ JSON Ayrıştırma Hatası. AI Yanıtı:\n{raw_response}{Colors.RESET}")
@@ -245,7 +270,7 @@ def main_process(prompt_text: str, model_instance: Any):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print(f"Kullanım: python assistant.py \"Göreviniz...\" [--dry-run]")
+        print(f"Kullanım: python assistant.py \"Göreviniz...\" [--dry-run] [--verbose]")
         sys.exit(1)
         
     # Argümanları ayıkla
@@ -264,7 +289,6 @@ if __name__ == "__main__":
     
     if model:
         main_process(user_prompt, model)
-
 ```
 
 #### 📄 Dosya: `check_models.py`
@@ -339,6 +363,8 @@ BACKUP_DIR = ".gassist_backups"        # Yedekleme klasörü
 HISTORY_LOG = ".gassist_history.log"   # Log dosyası
 MAX_BACKUPS_PER_FILE = 10              # Bir dosya için tutulacak max yedek
 
+
+
 # ==========================================
 # 🤖 MODEL AYARLARI (Deklarasyon)
 # ==========================================
@@ -346,15 +372,22 @@ MAX_BACKUPS_PER_FILE = 10              # Bir dosya için tutulacak max yedek
 MODEL_CONFIGS = {
     "gemini": {
         "env_var": "GOOGLE_API_KEY",
-        "model_name": "gemini-2.5-flash",  # En güncel, hızlı model
-        "display_name": "Google Gemini (2.5 Flash)"
+        "model_name": "gemini-2.5-flash",
+        "display_name": "Google Gemini 2.5 Flash",
     },
+    "groq": {
+    "env_var": "GROQ_API_KEY",
+    "model_id": "llama-3.3-70b-versatile",  # ÜCRETSİZ KATMANDA BULUNUR
+    "display_name": "Groq Llama 3.3 70B (ÜCRETSİZ)",
+},
     "huggingface": {
         "env_var": "HUGGINGFACE_API_KEY",
         "model_id": "Qwen/Qwen2.5-Coder-7B-Instruct",
-        "display_name": "Hugging Face (Qwen 2.5 Coder)"
+        "display_name": "Hugging Face Qwen",
     }
 }
+
+# (Dosyanın geri kalanı aynı kalacak)
 
 # ==========================================
 # 🧠 AI SİSTEM TALİMATI (System Prompt)
@@ -572,6 +605,59 @@ class GeminiModel(BaseModel):
         except Exception as e:
             # Hata mesajını daha net görelim
             raise ModelAPIError(f"Gemini Hatası: {e}")
+```
+
+#### 📄 Dosya: `core\groq.py`
+
+```py
+# core/groq.py (DOĞRU VERSİYON)
+import os
+import requests
+from .base import BaseModel, ModelAPIError
+from config import MODEL_CONFIGS
+
+class GroqModel(BaseModel):
+    """Groq LPU - Ultra hızlı inference"""
+    
+    def __init__(self):
+        conf = MODEL_CONFIGS["groq"]
+        self.MODEL_NAME = conf["display_name"]
+        
+        # ⚠️ Buradaki atamaların doğru yapıldığından emin olun:
+        self.api_key = os.getenv(conf["env_var"])
+        if not self.api_key:
+            raise ModelAPIError(f"{conf['env_var']} ortam değişkeni bulunamadı.")
+        
+        self.api_url = "https://api.groq.com/openai/v1/chat/completions"
+        self.model_id = conf["model_id"]
+    
+    def generate_content(self, system_instruction, prompt_text):
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "model": self.model_id,
+            "messages": [
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": prompt_text}
+            ],
+            "temperature": 0.1,
+            "max_tokens": 8000,
+            "response_format": {"type": "json_object"}  # JSON zorla
+        }
+        
+        try:
+            response = requests.post(self.api_url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+            result = response.json()
+            return result["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            # Hata mesajını daha detaylı görmek için
+            if hasattr(e, 'response') and e.response is not None:
+                 print(f"DEBUG RESPONSE: {e.response.text}")
+            raise ModelAPIError(f"Groq API Hatası: {e}")
 ```
 
 #### 📄 Dosya: `core\huggingface.py`

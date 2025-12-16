@@ -28,16 +28,22 @@ MAX_BACKUPS_PER_FILE = 10              # Bir dosya için tutulacak max yedek
 # 🤖 MODEL AYARLARI (Deklarasyon)
 # ==========================================
 # Not: API Anahtarları (Secret) burada değil, os.getenv ile çekilecek.
+# config.py dosyasındaki MODEL_CONFIGS sözlüğünü güncelleyin
 MODEL_CONFIGS = {
     "gemini": {
         "env_var": "GOOGLE_API_KEY",
         "model_name": "gemini-2.5-flash",
         "display_name": "Google Gemini 2.5 Flash",
     },
-    "groq": {  # YENİ EKLEME
+    "groq": {
         "env_var": "GROQ_API_KEY",
-        "model_id": "llama-3.1-70b-versatile",
-        "display_name": "Groq Llama 3.1 70B (ÖNERİLEN ✨)",
+        "model_id": "llama-3.3-70b-versatile",
+        "display_name": "Groq Llama 3.3 70B (ÜCRETSİZ)",
+    },
+    "deepseek": {
+        "env_var": "DEEPSEEK_API_KEY",
+        "model_id": "deepseek-chat",
+        "display_name": "DeepSeek Chat (ÜCRETSİZ)",
     },
     "huggingface": {
         "env_var": "HUGGINGFACE_API_KEY",
