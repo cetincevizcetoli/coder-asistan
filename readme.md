@@ -57,26 +57,59 @@ venv\Scripts\activate
 ```bash
 pip install -r requirements.txt
 ```
+### 4. API ANAHTAR
 
-### 4. API Anahtarlarını Tanımlayın
+Projenin çalışması için bir API anahtarına ihtiyacınız var. .env.example dosyasındaki şablonu kullanabilirsiniz veya aşağıdaki komutlarla terminal üzerinden tanımlayabilirsiniz.
 
-Projenin çalışması için bir API anahtarına ihtiyacınız var. `.env.example` dosyasındaki şablonu kullanabilirsiniz.
+** Linux/Mac için (Kalıcı Yöntem):**
+Terminale şu komutları yazarak .bashrc (veya .zshrc) dosyanıza ekleyin:
+bash
 
-**Linux/Mac için (Kalıcı Yöntem):**
-Terminale şu komutları yazarak `.bashrc` dosyanıza ekleyin:
-
-```bash
-# Google Gemini için (Önerilen - Ücretsiz & Hızlı)
+** Google Gemini için (Önerilen - Ücretsiz & Hızlı) **
+```
 echo 'export GOOGLE_API_KEY="Sizin_Keyiniz_Buraya"' >> ~/.bashrc
-
-# VEYA Hugging Face için
+```
+** VEYA Hugging Face için **
+```
 echo 'export HUGGINGFACE_API_KEY="Sizin_Tokeniniz_Buraya"' >> ~/.bashrc
+```
 
+** Değişiklikleri uygula **
+```
 source ~/.bashrc
 ```
 
----
+** Windows için: **
 
+Seçenek A: PowerShell (VS Code Varsayılan Terminali - Geçici)
+powershell
+
+** Google Gemini için **
+```
+$env:GOOGLE_API_KEY="Sizin_Keyiniz_Buraya"
+```
+** VEYA Hugging Face için **
+```
+$env:HUGGINGFACE_API_KEY="Sizin_Tokeniniz_Buraya"
+```
+Seçenek B: Command Prompt (CMD - Geçici)
+cmd
+
+** Google Gemini için **
+```
+set GOOGLE_API_KEY=Sizin_Keyiniz_Buraya
+```
+** VEYA Hugging Face için **
+```
+set HUGGINGFACE_API_KEY=Sizin_Tokeniniz_Buraya
+```
+Seçenek C: Kalıcı Olarak Ayarlamak (Tavsiye Edilen)
+** Eğer her seferinde yazmak istemiyorsanız, terminalde şu komutu bir kez çalıştırın (CMD veya PowerShell fark etmez):**
+cmd
+```
+setx GOOGLE_API_KEY "Sizin_Keyiniz_Buraya"
+```
+(Not: setx komutundan sonra değişkenin geçerli olması için terminali veya VS Code'u kapatıp yeniden açmanız gerekir.)
 ## 💻 Kullanım
 
 Coder-Asistan bir CLI (Komut Satırı) aracıdır. Tüm komutlar terminal üzerinden verilir.
