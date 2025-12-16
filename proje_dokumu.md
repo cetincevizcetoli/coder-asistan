@@ -1,6 +1,6 @@
 # 📝 Proje Dökümü: coder-asistan
 
-Bu döküm, **/home/ahmetc/proje/coder-asistan** dizini (mevcut klasör) ve altındakileri kapsar.
+Bu döküm, **D:\projects\coder-asistan** dizini (mevcut klasör) ve altındakileri kapsar.
 
 ### 📂 Proje Dizin Yapısı ve Dosyalar
 
@@ -17,13 +17,6 @@ Bu döküm, **/home/ahmetc/proje/coder-asistan** dizini (mevcut klasör) ve alt�
     - base.py
     - gemini.py
     - huggingface.py
-  - **src/**
-    - app.py
-    - requirements.txt
-    - **handlers/**
-      - user.py
-  - **gemini_venv/**
-    - pyvenv.cfg
 
 ---
 ### 💻 Kod İçeriği Dökümü
@@ -514,7 +507,7 @@ def select_model_interactive():
         return None
 ```
 
-#### 📄 Dosya: `core/base.py`
+#### 📄 Dosya: `core\base.py`
 
 ```py
 # core/base.py: Ortak Arayüz ve Hata Tanımları
@@ -536,7 +529,7 @@ class BaseModel:
         raise NotImplementedError("Bu metot alt sınıflar tarafından uygulanmalıdır.")
 ```
 
-#### 📄 Dosya: `core/gemini.py`
+#### 📄 Dosya: `core\gemini.py`
 
 ```py
 # core/gemini.py
@@ -581,7 +574,7 @@ class GeminiModel(BaseModel):
             raise ModelAPIError(f"Gemini Hatası: {e}")
 ```
 
-#### 📄 Dosya: `core/huggingface.py`
+#### 📄 Dosya: `core\huggingface.py`
 
 ```py
 # core/huggingface.py
@@ -648,34 +641,4 @@ class HuggingFaceModel(BaseModel):
 
         except Exception as e:
             raise ModelAPIError(f"HF API Hatası: {e}")
-```
-
-#### 📄 Dosya: `src/app.py`
-
-```py
-from flask import Flask, jsonify
-
-app = Flask(__name__)
-
-@app.route('/')
-def hello_world():
-    return 'Hello, World!'
-
-@app.route('/users')
-def get_users():
-    users = [
-        {'id': 1, 'name': 'Alice'},
-        {'id': 2, 'name': 'Bob'},
-        {'id': 3, 'name': 'Charlie'}
-    ]
-    return jsonify(users)
-
-if __name__ == '__main__':
-    app.run(debug=True)
-```
-
-#### 📄 Dosya: `src/handlers/user.py`
-
-```py
-Content preserved from original handlers/user.py
 ```

@@ -112,6 +112,15 @@ setx GOOGLE_API_KEY "Sizin_Keyiniz_Buraya"
 (Not: setx komutundan sonra değişkenin geçerli olması için terminali veya VS Code'u kapatıp yeniden açmanız gerekir.)
 ## 💻 Kullanım
 
+** Groq Linux için **
+```
+export GROQ_API_KEY='gsk_xxxxxxxxxxxxxxxxxxxxxxxx'
+```
+** Groq Windows için **
+```
+setx GROQ_API_KEY "Sizin_Keyiniz_Buraya"
+```
+
 Coder-Asistan bir CLI (Komut Satırı) aracıdır. Tüm komutlar terminal üzerinden verilir.
 
 ### Temel Komut

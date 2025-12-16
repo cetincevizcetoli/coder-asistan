@@ -13,6 +13,13 @@ from config import Colors, MODEL_CONFIGS
 from core.base import ModelAPIError
 from core.gemini import GeminiModel 
 
+# --- IMPORT: GROQ (Yeni) ---
+try:
+    from core.groq import GroqModel
+    GROQ_AVAILABLE = True
+except ImportError:
+    GROQ_AVAILABLE = False
+
 # --- IMPORT: HUGGING FACE (Opsiyonel) ---
 try:
     from core.huggingface import HuggingFaceModel
@@ -27,14 +34,23 @@ VERBOSE = False
 
 # --- MODEL SEÇİCİ ---
 def get_model_choice():
-    """Kullanıcıya model seçtirir ve örneği döndürür."""
-    print(f"\n{Colors.BLUE}--- AI MODEL SEÇİMİ ---{Colors.RESET}")
+    """Kullanıcıya model seçtirir."""
+    print(f"\n{Colors.BLUE}╔═══════════════════════════════╗")
+    print(f"║   🤖 AI MODEL SEÇİMİ          ║")
+    print(f"╚═══════════════════════════════╝{Colors.RESET}\n")
+    
     print(f"  [1] {MODEL_CONFIGS['gemini']['display_name']}")
+    
+    if GROQ_AVAILABLE:
+        print(f"  [2] {MODEL_CONFIGS['groq']['display_name']}")
+    else:
+        print(f"  [2] Groq (API Key Eksik - ÜCRETSİZ!)")
+    
     if HF_AVAILABLE:
-        print(f"  [2] {MODEL_CONFIGS['huggingface']['display_name']}")
+        print(f"  [3] {MODEL_CONFIGS['huggingface']['display_name']}")
     
     while True:
-        choice = input(f"{Colors.YELLOW}Seçiminiz (1/2): {Colors.RESET}").strip()
+        choice = input(f"\n{Colors.YELLOW}Seçiminiz (1/2/3): {Colors.RESET}").strip()
         
         if choice == "1":
             try:
@@ -42,13 +58,19 @@ def get_model_choice():
             except Exception as e:
                 print(f"{Colors.RED}Gemini Başlatılamadı: {e}{Colors.RESET}")
         
-        elif choice == "2" and HF_AVAILABLE:
+        elif choice == "2" and GROQ_AVAILABLE:
+            try:
+                return GroqModel()
+            except Exception as e:
+                print(f"{Colors.RED}Groq Başlatılamadı: {e}{Colors.RESET}")
+        
+        elif choice == "3" and HF_AVAILABLE:
             try:
                 return HuggingFaceModel()
             except Exception as e:
                 print(f"{Colors.RED}Hugging Face Başlatılamadı: {e}{Colors.RESET}")
         else:
-            print(f"{Colors.RED}Geçersiz seçim.{Colors.RESET}")
+            print(f"{Colors.RED}Geçersiz seçim veya model hazır değil.{Colors.RESET}")
 
 # --- YARDIMCI FONKSİYONLAR ---
 
@@ -91,6 +113,7 @@ def clean_json_string(json_str: str) -> str:
     """AI yanıtını temiz JSON formatına sokar."""
     # Markdown bloklarını temizle
     if "```" in json_str:
+        # Kod bloklarını kaldırırken (```json ... ```) veya sadece (```)
         json_str = re.sub(r"```json\n?|```", "", json_str)
     
     # Görünmez karakterleri temizle
@@ -100,7 +123,6 @@ def clean_json_string(json_str: str) -> str:
 def read_context_files(file_paths: List[str], current_dir: str) -> str:
     """
     Belirtilen dosyaları okur ve AI için bağlam oluşturur.
-    Performans için String Concatenation yerine Liste kullanır.
     """
     context_parts = []
     total_size = 0
@@ -167,6 +189,7 @@ def main_process(prompt_text: str, model_instance: Any):
         except json.JSONDecodeError:
             # Bazen AI tek tırnak kullanıyor, düzeltmeyi dene
             try:
+                # Tek tırnakları çift tırnağa çevirme denemesi
                 file_changes = json.loads(clean_response.replace("'", '"'))
             except:
                 print(f"{Colors.RED}❌ JSON Ayrıştırma Hatası. AI Yanıtı:\n{raw_response}{Colors.RESET}")
@@ -218,7 +241,7 @@ def main_process(prompt_text: str, model_instance: Any):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print(f"Kullanım: python assistant.py \"Göreviniz...\" [--dry-run]")
+        print(f"Kullanım: python assistant.py \"Göreviniz...\" [--dry-run] [--verbose]")
         sys.exit(1)
         
     # Argümanları ayıkla

@@ -22,6 +22,8 @@ BACKUP_DIR = ".gassist_backups"        # Yedekleme klasörü
 HISTORY_LOG = ".gassist_history.log"   # Log dosyası
 MAX_BACKUPS_PER_FILE = 10              # Bir dosya için tutulacak max yedek
 
+
+
 # ==========================================
 # 🤖 MODEL AYARLARI (Deklarasyon)
 # ==========================================
@@ -29,15 +31,22 @@ MAX_BACKUPS_PER_FILE = 10              # Bir dosya için tutulacak max yedek
 MODEL_CONFIGS = {
     "gemini": {
         "env_var": "GOOGLE_API_KEY",
-        "model_name": "gemini-2.5-flash",  # En güncel, hızlı model
-        "display_name": "Google Gemini (2.5 Flash)"
+        "model_name": "gemini-2.5-flash",
+        "display_name": "Google Gemini 2.5 Flash",
+    },
+    "groq": {  # YENİ EKLEME
+        "env_var": "GROQ_API_KEY",
+        "model_id": "llama-3.1-70b-versatile",
+        "display_name": "Groq Llama 3.1 70B (ÖNERİLEN ✨)",
     },
     "huggingface": {
         "env_var": "HUGGINGFACE_API_KEY",
         "model_id": "Qwen/Qwen2.5-Coder-7B-Instruct",
-        "display_name": "Hugging Face (Qwen 2.5 Coder)"
+        "display_name": "Hugging Face Qwen",
     }
 }
+
+# (Dosyanın geri kalanı aynı kalacak)
 
 # ==========================================
 # 🧠 AI SİSTEM TALİMATI (System Prompt)
