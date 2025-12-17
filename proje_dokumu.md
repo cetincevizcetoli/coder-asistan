@@ -1,23 +1,31 @@
 # 📝 Proje Dökümü: coder-asistan
 
-Bu döküm, **D:\projects\coder-asistan** dizini (mevcut klasör) ve altındakileri kapsar.
+Bu döküm, **D:\projects\coder-asistan** dizini için oluşturulmuştur.
+Not: `my_projects` klasörünün içeriği gizlilik gereği hariç tutulmuştur.
 
 ### 📂 Proje Dizin Yapısı ve Dosyalar
 
 - **coder-asistan/** (Proje Kökü)
+  - .gitignore
   - assistant.py
   - check_models.py
   - config.py
+  - debug.py
+  - generate_docs.py
+  - launcher.py
+  - migrate_projects.py
   - model_selector.py
-  - proje_dokumu_orjınal.md
+  - proje_dokumu.md
   - readme.md
   - requirements.txt
+  - system_audit.py
   - **core/**
     - base.py
     - deepseek.py
     - gemini.py
     - groq.py
     - huggingface.py
+    - memory.py
 
 ---
 ### 💻 Kod İçeriği Dökümü
@@ -31,279 +39,290 @@ import os
 import re
 import json
 import shutil
-import glob
+import time
+import requests
 from datetime import datetime
-from typing import List, Dict, Optional, Any
+from typing import List, Optional, Any, Tuple
 
-# Proje Modülleri
+# --- PROJE MODÜLLERİ ---
 import config
-from config import Colors, MODEL_CONFIGS
-from core.base import ModelAPIError
-from core.gemini import GeminiModel 
+from config import Colors, PRICING_RATES
+from core.memory import MemoryManager
 
-# --- IMPORT: GROQ (Yeni) ---
-try:
-    from core.groq import GroqModel
-    GROQ_AVAILABLE = True
-except ImportError:
-    GROQ_AVAILABLE = False
-# --- IMPORT: DEEPSEEK (Yeni) ---
-try:
-    from core.deepseek import DeepSeekModel
-    DEEPSEEK_AVAILABLE = True
-except ImportError:
-    DEEPSEEK_AVAILABLE = False
-# --- IMPORT: HUGGING FACE (Opsiyonel) ---
-try:
-    from core.huggingface import HuggingFaceModel
-    HF_AVAILABLE = True
-except ImportError:
-    HF_AVAILABLE = False
+# --- DİNAMİK MODEL İMPORTLARI ---
+try: from core.gemini import GeminiModel
+except ImportError: pass
+try: from core.groq import GroqModel; GROQ_AVAILABLE = True
+except ImportError: GROQ_AVAILABLE = False
+try: from core.deepseek import DeepSeekModel; DEEPSEEK_AVAILABLE = True
+except ImportError: DEEPSEEK_AVAILABLE = False
+try: from core.huggingface import HuggingFaceModel; HF_AVAILABLE = True
+except ImportError: HF_AVAILABLE = False
 
-# --- SABİTLER (Config'den alınır) ---
-FILE_PATH_PATTERN = re.compile(r'\b[\w./-]+\.(py|js|html|css|md|json|txt|java|cpp|h|ts|jsx|tsx|sh|env)\b', re.IGNORECASE)
-DRY_RUN = False
-VERBOSE = False
+# --- SABİTLER ---
+FILE_PATTERN = re.compile(r"[\w-]+\.(py|js|html|css|md|json|txt|java|cpp|h|ts|jsx|tsx|sh|env)", re.IGNORECASE)
 
-# --- MODEL SEÇİCİ ---
-def get_model_choice():
-    """Kullanıcıya model seçtirir."""
-    print(f"\n{Colors.BLUE}╔═══════════════════════════════╗")
-    print(f"║   🤖 AI MODEL SEÇİMİ          ║")
-    print(f"╚═══════════════════════════════╝{Colors.RESET}\n")
-    
-    print(f"  [1] {MODEL_CONFIGS['gemini']['display_name']}")
-    
-    if GROQ_AVAILABLE:
-        print(f"  [2] {MODEL_CONFIGS['groq']['display_name']}")
-    else:
-        print(f"  [2] Groq (API Key Eksik - ÜCRETSİZ!)")
-    
-    if HF_AVAILABLE:
-        print(f"  [3] {MODEL_CONFIGS['huggingface']['display_name']}")
-    
-    # DeepSeek seçeneği ekleyin
-    if DEEPSEEK_AVAILABLE:
-        print(f"  [4] {MODEL_CONFIGS['deepseek']['display_name']}")
-    
-    while True:
-        choice = input(f"\n{Colors.YELLOW}Seçiminiz (1/2/3/4): {Colors.RESET}").strip()
-        
-        if choice == "1":
-            try:
-                return GeminiModel()
-            except Exception as e:
-                print(f"{Colors.RED}Gemini Başlatılamadı: {e}{Colors.RESET}")
-        
-        elif choice == "2" and GROQ_AVAILABLE:
-            try:
-                return GroqModel()
-            except Exception as e:
-                print(f"{Colors.RED}Groq Başlatılamadı: {e}{Colors.RESET}")
-        
-        elif choice == "3" and HF_AVAILABLE:
-            try:
-                return HuggingFaceModel()
-            except Exception as e:
-                print(f"{Colors.RED}Hugging Face Başlatılamadı: {e}{Colors.RESET}")
-        
-        # DeepSeek seçeneği ekleyin
-        elif choice == "4" and DEEPSEEK_AVAILABLE:
-            try:
-                return DeepSeekModel()
-            except Exception as e:
-                print(f"{Colors.RED}DeepSeek Başlatılamadı: {e}{Colors.RESET}")
-        else:
-            print(f"{Colors.RED}Geçersiz seçim veya model hazır değil.{Colors.RESET}")
-
-# --- YARDIMCI FONKSİYONLAR ---
+# ==========================================
+# 🛠️ YARDIMCI FONKSİYONLAR
+# ==========================================
 
 def is_safe_path(file_path: str, current_directory: str) -> bool:
-    """Path Traversal saldırılarını önler."""
     if os.path.isabs(file_path): return False
     normalized_path = os.path.normpath(file_path)
     if normalized_path.startswith('..'): return False
     full_path = os.path.join(current_directory, file_path)
-    real_path = os.path.realpath(full_path) 
-    if not real_path.startswith(current_directory): return False
-    return True
+    return os.path.realpath(full_path).startswith(current_directory)
+
+def clean_json_string(json_str: str) -> str:
+    if "```" in json_str:
+        json_str = re.sub(r"```json\n?|```", "", json_str)
+    return json_str.strip()
 
 def backup_file(full_path: str) -> Optional[str]:
-    """Dosya değişmeden önce yedeğini alır."""
-    if not os.path.exists(full_path):
-        return None
-        
+    if not os.path.exists(full_path): return None
     os.makedirs(config.BACKUP_DIR, exist_ok=True)
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     backup_name = f"{os.path.basename(full_path)}.{timestamp}.backup"
-    backup_path = os.path.join(config.BACKUP_DIR, backup_name)
+    shutil.copy(full_path, os.path.join(config.BACKUP_DIR, backup_name))
+    return backup_name
+
+def extract_wait_time(error_message: str) -> int:
+    match = re.search(r"retry in (\d+(\.\d+)?)s", str(error_message))
+    if match: return int(float(match.group(1))) + 2 
+    return 30 
+
+def log_conversation(working_dir: str, user_prompt: str, ai_explanation: str, model_name: str, cost: float = 0.0):
+    """Sohbeti ve MALİYETİ detaylı şekilde log dosyasına kaydeder."""
+    log_file = os.path.join(working_dir, ".chat_history.log")
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M')
     
+    # YENİ: Maliyet satırı eklendi
+    log_entry = (
+        f"════════════════════════════════════════════════════════════\n"
+        f"📅 ZAMAN: {timestamp} | 🤖 MODEL: {model_name}\n"
+        f"💰 MALİYET: ${cost:.5f}\n"
+        f"👤 USER: {user_prompt}\n"
+        f"🤖 AI:   {ai_explanation}\n"
+    )
     try:
-        shutil.copy(full_path, backup_path)
-        
-        # Eski yedekleri temizle
-        pattern = os.path.join(config.BACKUP_DIR, f"{os.path.basename(full_path)}.*.backup")
-        backups = sorted(glob.glob(pattern))
-        if len(backups) > config.MAX_BACKUPS_PER_FILE:
-            for old in backups[:-config.MAX_BACKUPS_PER_FILE]:
-                os.remove(old)
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(log_entry)
     except Exception as e:
-        print(f"{Colors.RED}Yedekleme Hatası: {e}{Colors.RESET}")
-        return None
-        
-    return backup_path
+        print(f"{Colors.RED}Log Yazma Hatası: {e}{Colors.RESET}")
 
-def clean_json_string(json_str: str) -> str:
-    """AI yanıtını temiz JSON formatına sokar."""
-    # Markdown bloklarını temizle
-    if "```" in json_str:
-        # Kod bloklarını kaldırırken (```json ... ```) veya sadece (```)
-        json_str = re.sub(r"```json\n?|```", "", json_str)
+def update_project_stats(working_dir: str, usage_data: dict, model_key: str) -> Tuple[float, float]:
+    """Toplam proje maliyetini hesaplar, kaydeder ve döner."""
+    stats_file = os.path.join(working_dir, ".project_stats.json")
     
-    # Görünmez karakterleri temizle
-    json_str = json_str.replace('\u00ad', '').replace('\u200b', '')
-    return json_str.strip()
+    stats = {
+        "total_cost": 0.0,
+        "total_input_tokens": 0,
+        "total_output_tokens": 0,
+        "last_updated": ""
+    }
 
-def read_context_files(file_paths: List[str], current_dir: str) -> str:
-    """
-    Belirtilen dosyaları okur ve AI için bağlam oluşturur.
-    """
-    context_parts = []
-    total_size = 0
-    
-    for fname in file_paths:
-        full_path = os.path.join(current_dir, fname)
-        
-        if not os.path.exists(full_path):
-            continue
-            
+    if os.path.exists(stats_file):
         try:
-            # Dosya boyutunu kontrol et
-            fsize = os.path.getsize(full_path)
-            if fsize > config.MAX_FILE_SIZE:
-                print(f"{Colors.YELLOW}⚠️ Dosya çok büyük, atlandı: {fname}{Colors.RESET}")
-                continue
-                
-            total_size += fsize
-            if total_size > config.MAX_TOTAL_SIZE:
-                print(f"{Colors.YELLOW}⚠️ Toplam okuma limiti aşıldı, kalan dosyalar atlandı.{Colors.RESET}")
-                break
+            with open(stats_file, 'r', encoding='utf-8') as f:
+                stats = json.load(f)
+        except: pass
 
-            with open(full_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-                context_parts.append(f"----- {fname} -----\n{content}\n")
-                
-        except Exception as e:
-            if VERBOSE: print(f"Dosya okuma hatası ({fname}): {e}")
-
-    return "".join(context_parts)
-
-# --- ANA İŞLEM FONKSİYONU ---
-
-def main_process(prompt_text: str, model_instance: Any):
-    current_directory = os.getcwd()
+    in_tokens = usage_data.get("input_tokens", 0)
+    out_tokens = usage_data.get("output_tokens", 0)
+    rates = PRICING_RATES.get(model_key, {"input": 0, "output": 0})
     
-    # 1. Prompt içindeki dosya isimlerini bul
-    potential_files = FILE_PATH_PATTERN.findall(prompt_text)
-    
-    # 2. Dosyaları verimli şekilde oku
-    files_context = read_context_files(potential_files, current_directory)
+    current_cost = ((in_tokens / 1_000_000) * rates["input"]) + ((out_tokens / 1_000_000) * rates["output"])
 
-    # 3. Son Promptu Hazırla
-    if files_context:
-        full_prompt = f"MEVCUT DOSYALAR:\n{files_context}\n\nKULLANICI İSTEĞİ:\n{prompt_text}"
+    stats["total_cost"] += current_cost
+    stats["total_input_tokens"] += in_tokens
+    stats["total_output_tokens"] += out_tokens
+    stats["last_updated"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    try:
+        with open(stats_file, 'w', encoding='utf-8') as f:
+            json.dump(stats, f, indent=4)
+    except Exception as e:
+        print(f"{Colors.RED}İstatistik kayıt hatası: {e}{Colors.RESET}")
+
+    return current_cost, stats["total_cost"]
+
+def print_cost_report(current_cost: float, total_cost: float, usage_data: dict):
+    in_tokens = usage_data.get("input_tokens", 0)
+    out_tokens = usage_data.get("output_tokens", 0)
+
+    tier_label = "ÜCRETSİZ KATMAN" if config.USER_TIER == 'free' else "ÜCRETLİ API"
+    
+    if config.USER_TIER == 'free':
+        c_cost_str = "$0.00000"
+        t_cost_str = "$0.00000"
     else:
-        full_prompt = prompt_text
-        
-    print(f"{Colors.BLUE}✅ GÖREV:{Colors.RESET} {prompt_text[:80]}...")
-    print(f"{Colors.CYAN}⏳ {model_instance.MODEL_NAME} çalışıyor...{Colors.RESET}")
+        c_cost_str = f"${current_cost:.5f}"
+        t_cost_str = f"${total_cost:.5f}"
 
-    try:
-        # 4. AI'dan Yanıt Al
-        raw_response = model_instance.generate_content(
-            system_instruction=config.SYSTEM_INSTRUCTION,
-            prompt_text=full_prompt
-        )
+    print(f"\n{Colors.GREY}📊 FİNANSAL RAPOR ({tier_label}){Colors.RESET}")
+    print(f"{Colors.GREY}   ├── Bu İşlem:  Girdi: {in_tokens:<5} | Çıktı: {out_tokens:<5} | Maliyet: {Colors.GREEN}{c_cost_str}{Colors.RESET}")
+    print(f"{Colors.GREY}   └── 💰 TOPLAM: {Colors.CYAN}Proje Geneli Harcama: {t_cost_str}{Colors.RESET}")
+
+# ==========================================
+# 🚀 ANA İŞLEM DÖNGÜSÜ
+# ==========================================
+
+def main_process(prompt_text: str, model_instance: Any, working_dir: str, is_dry_run: bool = False):
+    
+    try: memory = MemoryManager(project_root=working_dir)
+    except: memory = None
+
+    if memory:
+        all_files = []
+        for root, dirs, files in os.walk(working_dir):
+            dirs[:] = [d for d in dirs if not d.startswith('.')]
+            for file in files:
+                if FILE_PATTERN.match(file):
+                    rel_path = os.path.relpath(os.path.join(root, file), working_dir)
+                    all_files.append(rel_path)
+        if all_files: memory.index_files(all_files)
+
+    rag_context = ""
+    if memory:
+        print(f"{Colors.CYAN}🔍 Hafıza taranıyor...{Colors.RESET}")
+        rag_context = memory.query(prompt_text, n_results=config.MAX_CONTEXT_RESULTS)
+        if len(rag_context) > config.MAX_CONTEXT_CHARS:
+            rag_context = rag_context[:config.MAX_CONTEXT_CHARS] + "\n...(Kırpıldı)..."
+
+    full_prompt = (
+        f"--- PROJE BAĞLAMI ---\n{rag_context}\n\n"
+        f"--- KULLANICI İSTEĞİ ---\n{prompt_text}\n"
+    )
         
-        # 5. JSON Parse Et
-        clean_response = clean_json_string(raw_response)
+    print(f"{Colors.BLUE}✅ GÖREV:{Colors.RESET} {prompt_text}")
+    if is_dry_run: print(f"{Colors.YELLOW}🧪 (DRY-RUN AKTİF){Colors.RESET}")
+
+    ai_response_plan = {} 
+    
+    # Maliyet değişkenleri
+    current_cost = 0.0
+    total_cost = 0.0
+
+    # 4. MODEL ÇALIŞTIRMA
+    while True:
+        masked_key = os.getenv("GOOGLE_API_KEY", "")[:5] + "..."
+        print(f"{Colors.CYAN}⏳ {model_instance.MODEL_NAME} düşünüyor... (Key: {masked_key}){Colors.RESET}")
         
         try:
-            file_changes = json.loads(clean_response)
-        except json.JSONDecodeError:
-            # Bazen AI tek tırnak kullanıyor, düzeltmeyi dene
+            response_data = model_instance.generate_content(
+                system_instruction=config.SYSTEM_INSTRUCTION,
+                prompt_text=full_prompt
+            )
+            
+            if isinstance(response_data, str):
+                raw_text = response_data; usage_info = {}; model_key_used = "unknown"
+            else:
+                raw_text = response_data["content"]; usage_info = response_data["usage"]; model_key_used = response_data["model_key"]
+
+            clean_response = clean_json_string(raw_text)
+            
             try:
-                # Tek tırnakları çift tırnağa çevirme denemesi
-                file_changes = json.loads(clean_response.replace("'", '"'))
-            except:
-                print(f"{Colors.RED}❌ JSON Ayrıştırma Hatası. AI Yanıtı:\n{raw_response}{Colors.RESET}")
-                return
+                ai_response_plan = json.loads(clean_response)
+            except json.JSONDecodeError:
+                print(f"{Colors.YELLOW}⚠️ Uyarı: AI eski formatta yanıt verdi, dönüştürülüyor...{Colors.RESET}")
+                temp_dict = json.loads(clean_response)
+                ai_response_plan = {
+                    "aciklama": "AI açıklama sağlamadı.",
+                    "dosya_olustur": temp_dict,
+                    "dosya_sil": []
+                }
 
-        if not isinstance(file_changes, dict):
-            print(f"{Colors.RED}❌ Beklenmeyen yanıt formatı.{Colors.RESET}")
-            return
+            # --- MALİYET HESAPLAMA ---
+            current_cost, total_cost = update_project_stats(working_dir, usage_info, model_key_used)
+            print_cost_report(current_cost, total_cost, usage_info)
+            break 
 
-        # 6. Değişiklikleri Uygula
-        print("\n📋 PLANLANAN DEĞİŞİKLİKLER:")
-        for path, content in file_changes.items():
-            print(f"   📂 {path} ({len(content)} karakter)")
-            
-        if DRY_RUN:
-            print(f"\n{Colors.YELLOW}🧪 Dry-Run Modu: Kayıt yapılmadı.{Colors.RESET}")
-            return
+        except requests.exceptions.ConnectionError:
+            print(f"\n{Colors.RED}📡 İNTERNET BAĞLANTISI YOK!{Colors.RESET}")
+            if input("Tekrar? (e/h): ").lower() != 'e': return
+        
+        except Exception as e:
+            err_str = str(e)
+            print(f"\n{Colors.RED}💣 HATA: {e}{Colors.RESET}")
+            if "429" in err_str:
+                wait_time = extract_wait_time(err_str)
+                print(f"{Colors.YELLOW}🚦 Kota doldu ({wait_time}s). [1] Bekle [2] Model Seç [3] İptal{Colors.RESET}")
+                c = input("Seçim: ")
+                if c == "1":
+                    time.sleep(wait_time); continue
+                elif c == "2":
+                    from model_selector import select_model_interactive
+                    m = select_model_interactive()
+                    if m: model_instance = m
+                    continue
+                else: return
+            else:
+                if input("Tekrar? (e/h): ").lower() != 'e': return
 
-        confirm = input(f"\n{Colors.GREEN}Onaylıyor musunuz? (e/h): {Colors.RESET}").lower()
-        if confirm != 'e':
-            print("❌ İşlem iptal edildi.")
-            return
+    # --- PLANLAMA ---
+    explanation = ai_response_plan.get("aciklama", "Açıklama yok.")
+    files_to_create = ai_response_plan.get("dosya_olustur", {})
+    files_to_delete = ai_response_plan.get("dosya_sil", [])
 
-        for rel_path, content in file_changes.items():
-            if not is_safe_path(rel_path, current_directory):
-                print(f"{Colors.RED}🚨 Güvenlik Uyarısı: {rel_path} engellendi.{Colors.RESET}")
-                continue
+    print(f"\n{Colors.MAGENTA}🤖 AI DİYOR Kİ:{Colors.RESET}")
+    print(f"{Colors.CYAN}{explanation}{Colors.RESET}")
+    
+    print("\n📋 PLANLANAN DEĞİŞİKLİKLER:")
+    for path in files_to_create.keys(): print(f"   📂 OLUŞTUR/GÜNCELLE: {path}")
+    for path in files_to_delete: print(f"   🗑️  SİLİNECEK: {path}")
 
-            full_path = os.path.join(current_directory, rel_path)
-            
-            # Klasör oluştur
-            os.makedirs(os.path.dirname(full_path), exist_ok=True)
-            
-            # Yedekle
-            if os.path.exists(full_path):
-                backup = backup_file(full_path)
-                if backup: print(f"   📦 Yedek: {os.path.basename(backup)}")
+    if not files_to_create and not files_to_delete:
+        print(f"{Colors.YELLOW}   (İşlem yok){Colors.RESET}")
+        log_conversation(working_dir, prompt_text, explanation, model_instance.MODEL_NAME, current_cost)
+        return
 
-            # Yaz
-            with open(full_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-            print(f"{Colors.GREEN}   ✅ Yazıldı: {rel_path}{Colors.RESET}")
+    if is_dry_run:
+        print(f"\n{Colors.YELLOW}🧪 DRY-RUN Bitti.{Colors.RESET}")
+        return
 
-    except ModelAPIError as e:
-        print(f"\n{Colors.RED}💣 API Hatası: {e}{Colors.RESET}")
-    except Exception as e:
-        print(f"\n{Colors.RED}💣 Beklenmeyen Hata: {e}{Colors.RESET}")
-        if VERBOSE: raise e
+    if input(f"\n{Colors.GREEN}Onaylıyor musunuz? (e/h): {Colors.RESET}").lower() != 'e':
+        print("❌ İptal edildi.")
+        return
+
+    # --- UYGULAMA ---
+    for rel_path in files_to_delete:
+        if not is_safe_path(rel_path, working_dir): continue
+        full_path = os.path.join(working_dir, rel_path)
+        if os.path.exists(full_path):
+            try:
+                backup_file(full_path)
+                os.remove(full_path)
+                print(f"{Colors.RED}   🗑️  Silindi: {rel_path}{Colors.RESET}")
+            except Exception as e:
+                print(f"{Colors.RED}   ❌ Silinemedi: {rel_path} ({e}){Colors.RESET}")
+
+    for rel_path, content in files_to_create.items():
+        if not is_safe_path(rel_path, working_dir):
+            print(f"{Colors.RED}🚨 Engellendi: {rel_path}{Colors.RESET}")
+            continue
+        full_path = os.path.join(working_dir, rel_path)
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+        if os.path.exists(full_path): backup_file(full_path)
+        with open(full_path, 'w', encoding='utf-8') as f: f.write(content)
+        print(f"{Colors.GREEN}   ✅ Yazıldı: {rel_path}{Colors.RESET}")
+        if memory: memory.index_files([rel_path])
+
+    # Loglama (Maliyet parametresi eklendi)
+    log_conversation(working_dir, prompt_text, explanation, model_instance.MODEL_NAME, current_cost)
+
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print(f"Kullanım: python assistant.py \"Göreviniz...\" [--dry-run] [--verbose]")
-        sys.exit(1)
-        
-    # Argümanları ayıkla
-    args = sys.argv[1:]
-    if "--dry-run" in args:
-        DRY_RUN = True
-        args.remove("--dry-run")
-    if "--verbose" in args:
-        VERBOSE = True
-        args.remove("--verbose")
-        
-    user_prompt = " ".join(args)
+    if len(sys.argv) < 2: sys.exit(1)
     
-    # Modeli seç ve başlat
-    model = get_model_choice()
+    raw_args = sys.argv[1:]
+    is_dry_run = "--dry-run" in raw_args
+    cleaned_args = [a for a in raw_args if a != "--dry-run" and a != "--verbose"]
+    prompt = " ".join(cleaned_args)
+    cwd = os.getcwd()
     
-    if model:
-        main_process(user_prompt, model)
+    from model_selector import select_model_interactive
+    model = select_model_interactive()
+    if model: main_process(prompt, model, cwd, is_dry_run=is_dry_run)
 ```
 
 #### 📄 Dosya: `check_models.py`
@@ -317,38 +336,37 @@ try:
     from google import genai
 except ImportError:
     print("❌ HATA: 'google-genai' kütüphanesi bulunamadı.")
-    print("👉 Çözüm: Önce 'pip install google-genai' komutunu çalıştırın.")
     sys.exit(1)
 
-# API Anahtarını al
 api_key = os.getenv("GOOGLE_API_KEY")
 if not api_key:
     print("❌ HATA: GOOGLE_API_KEY tanımlı değil!")
-    print("👉 Terminale şunu yazın: export GOOGLE_API_KEY='anahtariniz'")
     sys.exit(1)
 
-print(f"🔑 Anahtar ile bağlanılıyor: {api_key[:5]}...")
+print(f"🔑 Anahtar ile bağlanılıyor... (Son 4 hane: {api_key[-4:]})")
 
 try:
     client = genai.Client(api_key=api_key)
-    print("\n📡 --- GOOGLE TARAFINDAN ONAYLANAN MODELLER ---")
+    print("\n📡 --- HESABINIZDA AKTİF OLAN MODELLER ---")
     
     count = 0
     # Modelleri çek ve listele
+    # Pager üzerinden döner, listeye çevirelim
     for m in client.models.list():
+        # Sadece içerik üretebilen modelleri al
         if "generateContent" in m.supported_actions:
-            # model isminin başındaki 'models/' kısmını atarak temiz göster
+            # İsmi temizle (models/ önekini at)
             clean_name = m.name.replace('models/', '')
             print(f"✅ {clean_name}")
             count += 1
             
     if count == 0:
-        print("\n⚠️ HATA: Erişim izniniz olan hiçbir model bulunamadı.")
-        print("Hesabınızın faturalandırma (Billing) ayarlarını kontrol etmeniz gerekebilir.")
+        print("\n⚠️ HATA: Hiçbir model bulunamadı. API Key'inizin yetkilerini kontrol edin.")
+    else:
+        print("\n👉 İPUCU: Yukarıdaki ✅ ile başlayan isimlerden birini config.py dosyasına kopyalayın.")
 
 except Exception as e:
-    print(f"\n❌ KRİTİK HATA: {e}")
-
+    print(f"\n❌ BAĞLANTI HATASI: {e}")
 ```
 
 #### 📄 Dosya: `config.py`
@@ -357,7 +375,7 @@ except Exception as e:
 import os
 
 # ==========================================
-# 🎨 RENK AYARLARI (Terminal Çıktısı İçin)
+# 🎨 RENK AYARLARI
 # ==========================================
 class Colors:
     GREEN = '\033[92m'
@@ -365,41 +383,59 @@ class Colors:
     YELLOW = '\033[93m'
     BLUE = '\033[94m'
     CYAN = '\033[96m'
+    MAGENTA = '\033[95m'
+    GREY = '\033[90m'
     BOLD = '\033[1m'
     RESET = '\033[0m'
 
 # ==========================================
 # ⚙️ SİSTEM VE DOSYA AYARLARI
 # ==========================================
-# Dosya okuma/yazma limitleri (Sihirli sayılar burada toplandı)
-MAX_FILE_SIZE = 5 * 1024 * 1024        # 5 MB (Tek dosya limiti)
-MAX_TOTAL_SIZE = 20 * 1024 * 1024      # 20 MB (Toplam proje okuma limiti)
-BACKUP_DIR = ".gassist_backups"        # Yedekleme klasörü
-HISTORY_LOG = ".gassist_history.log"   # Log dosyası
-MAX_BACKUPS_PER_FILE = 10              # Bir dosya için tutulacak max yedek
+MAX_FILE_SIZE = 5 * 1024 * 1024
+MAX_TOTAL_SIZE = 20 * 1024 * 1024
+BACKUP_DIR = ".gassist_backups"
+MAX_BACKUPS_PER_FILE = 5
+MEMORY_DIR_NAME = ".coder_memory"
+COLLECTION_NAME = "project_codebase"
+EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+MAX_CONTEXT_RESULTS = 3
+MAX_CONTEXT_CHARS = 12000
+MAX_BACKUPS_PER_FILE = 10
 
 
+# YENİ: Projelerin toplanacağı ana klasör
+PROJECTS_DIR = "my_projects"
 
 # ==========================================
-# 🤖 MODEL AYARLARI (Deklarasyon)
+# 💰 MALİYET VE KATMAN
 # ==========================================
-# Not: API Anahtarları (Secret) burada değil, os.getenv ile çekilecek.
-# config.py dosyasındaki MODEL_CONFIGS sözlüğünü güncelleyin
+USER_TIER = 'free' 
+PRICING_RATES = {
+    "gemini-2.5-flash-lite": { "input": 0.075, "output": 0.30 },
+    "gemini-2.5-flash": { "input": 0.10, "output": 0.40 },
+    "llama-3.3-70b-versatile": { "input": 0.59, "output": 0.79 },
+    "deepseek-chat": { "input": 0.14, "output": 0.28 },
+    "Qwen/Qwen2.5-Coder-7B-Instruct": { "input": 0.0, "output": 0.0 }
+}
+
+# ==========================================
+# 🤖 MODEL AYARLARI
+# ==========================================
 MODEL_CONFIGS = {
     "gemini": {
         "env_var": "GOOGLE_API_KEY",
-        "model_name": "gemini-2.5-flash",
-        "display_name": "Google Gemini 2.5 Flash",
+        "model_name": "gemini-2.5-flash-lite", 
+        "display_name": "Google Gemini 2.5 Flash Lite",
     },
     "groq": {
         "env_var": "GROQ_API_KEY",
         "model_id": "llama-3.3-70b-versatile",
-        "display_name": "Groq Llama 3.3 70B (ÜCRETSİZ)",
+        "display_name": "Groq Llama 3.3 70B",
     },
     "deepseek": {
         "env_var": "DEEPSEEK_API_KEY",
         "model_id": "deepseek-chat",
-        "display_name": "DeepSeek Chat (ÜCRETSİZ)",
+        "display_name": "DeepSeek Chat",
     },
     "huggingface": {
         "env_var": "HUGGINGFACE_API_KEY",
@@ -408,22 +444,503 @@ MODEL_CONFIGS = {
     }
 }
 
-# (Dosyanın geri kalanı aynı kalacak)
-
 # ==========================================
-# 🧠 AI SİSTEM TALİMATI (System Prompt)
+# 🧠 YENİ AI SİSTEM TALİMATI (Akıllı JSON Modu)
 # ==========================================
 SYSTEM_INSTRUCTION = (
     "Sen uzman bir yazılım mimarı ve kodlama asistanısın. "
-    "Görevin: Verilen talimatlara göre dosya yapısını oluşturmak veya güncellemektir.\n"
+    "Görevin: Verilen talimatlara ve RAG hafızasından gelen bağlama göre projeyi yönetmektir.\n"
     "KURALLAR:\n"
     "1. Yanıtın SADECE ve SADECE geçerli bir JSON objesi olmalıdır.\n"
-    "2. JSON formatı: {'dosya_yolu': 'dosya_icerigi'}\n"
-    "3. Asla Markdown (```json ... ```) kullanma, sadece saf JSON döndür.\n"
-    "4. Sohbet etme, açıklama yapma, sadece JSON ver.\n"
+    "2. JSON formatı ŞU ŞEKİLDE OLMALIDIR:\n"
+    "{\n"
+    "  'aciklama': 'Yaptığınız işlemin kısa bir özeti ve nedeni (Örn: Hatalı yolu düzelttim)',\n"
+    "  'dosya_olustur': {'dosya_yolu': 'icerik', 'dosya_yolu2': 'icerik'},\n"
+    "  'dosya_sil': ['silinecek_dosya_yolu_1', 'silinecek_dosya_yolu_2']\n"
+    "}\n"
+    "3. Eğer silinecek dosya yoksa 'dosya_sil': [] gönder.\n"
+    "4. Asla Markdown (```json ... ```) kullanma, sadece saf JSON döndür.\n"
     "5. Türkçe karakterleri UTF-8 olarak koru."
 )
+```
 
+#### 📄 Dosya: `debug.py`
+
+```py
+import os
+import sys
+import chromadb
+from pathlib import Path
+
+# Renkler
+CYAN = '\033[96m'
+GREEN = '\033[92m'
+YELLOW = '\033[93m'
+RED = '\033[91m'
+RESET = '\033[0m'
+
+def list_projects():
+    workspace = Path.cwd()
+    projects = []
+    for entry in workspace.iterdir():
+        if entry.is_dir() and (entry / ".coder_memory").exists():
+            projects.append(entry)
+    return projects
+
+def inspect_memory(project_path):
+    memory_path = project_path / ".coder_memory"
+    
+    print(f"\n{CYAN}🧠 Veritabanı Bağlanıyor: {memory_path}{RESET}")
+    
+    try:
+        client = chromadb.PersistentClient(path=str(memory_path))
+        # Koleksiyon adımız config.py'de 'project_codebase' idi
+        collection = client.get_collection("project_codebase")
+        
+        count = collection.count()
+        print(f"{GREEN}📊 Toplam Kayıtlı Parça (Chunk): {count}{RESET}")
+        
+        if count == 0:
+            print(f"{RED}⚠️ Hafıza boş! Henüz hiçbir dosya indekslenmemiş.{RESET}")
+            return
+
+        print(f"\n{YELLOW}--- SON KAYDEDİLEN 5 VERİ ---{RESET}")
+        # İlk 5 veriyi çek (metadata ve id'leri getir)
+        data = collection.peek(limit=5)
+        
+        ids = data['ids']
+        metadatas = data['metadatas']
+        documents = data['documents']
+        
+        for i in range(len(ids)):
+            doc_id = ids[i]
+            meta = metadatas[i]
+            content = documents[i]
+            
+            # İçerik çok uzunsa kısalt
+            preview = content[:100].replace('\n', ' ') + "..."
+            
+            print(f"[{i+1}] ID: {doc_id}")
+            print(f"    Kaynak: {meta}")
+            print(f"    İçerik: {preview}\n")
+            
+    except Exception as e:
+        print(f"{RED}Hata: {e}{RESET}")
+        print("Veritabanı henüz oluşturulmamış veya bozuk olabilir.")
+
+if __name__ == "__main__":
+    os.system('cls' if os.name == 'nt' else 'clear')
+    print("🕵️  RAG HAFIZA MÜFETTİŞİ")
+    print("-----------------------")
+    
+    projects = list_projects()
+    
+    if not projects:
+        print("Hiç proje bulunamadı.")
+        sys.exit()
+        
+    for idx, p in enumerate(projects, 1):
+        print(f"[{idx}] {p.name}")
+        
+    choice = input("\nHangi projeyi inceleyelim? (No): ")
+    if choice.isdigit() and 1 <= int(choice) <= len(projects):
+        inspect_memory(projects[int(choice)-1])
+    else:
+        print("Geçersiz seçim.")
+```
+
+#### 📄 Dosya: `generate_docs.py`
+
+```py
+import os
+import sys
+
+# ==========================================
+# ⚙️ AYARLAR VE FİLTRELER
+# ==========================================
+
+# Sadece içeriği taranmayacak sistem klasörleri
+DIKKATE_ALINMAYACAK_DIZINLER = [
+    '.git', '__pycache__', 'venv', '.venv', 'env', '.env', 'node_modules', 
+    '.vscode', '.idea', 'dist', 'build', 'target', 'bin',
+    '__macosx', '.ds_store', 'logs', 'site-packages', 'lib', 'include',
+    '.gassist_backups', '.coder_memory'
+]
+
+# İçeriği dökülmeyecek ama varlığı gösterilecek "Özel" klasörler
+OZEL_USER_KLASORLERI = ['my_projects']
+
+# İçeriği döküme eklenecek kod uzantıları
+BELGELENECEK_KOD_UZANTILARI = [
+    '.py', '.php', '.js', '.html', '.css', '.json', '.xml', '.yaml', '.yml', 
+    '.sh', '.bash', '.c', '.cpp', '.h', '.hpp', '.java', '.go', '.rb', '.swift', 
+    '.kt', '.ts', '.jsx', '.tsx', '.conf', '.ini', '.sql', '.md', '.txt'
+]
+
+# Çıktı dosyasının adı
+CIKTI_DOSYASI = "proje_dokumu.md"
+
+# ==========================================
+# 🛠️ FONKSİYONLAR
+# ==========================================
+
+def dosya_icerigini_getir(yol):
+    """Dosya içeriğini okur ve Markdown kod bloğu içinde döndürür."""
+    try:
+        with open(yol, 'r', encoding='utf-8') as f:
+            icerik = f.read()
+            
+        uzanti = os.path.splitext(yol)[1].lstrip('.').lower()
+        return f"\n```{(uzanti if uzanti else 'plaintext')}\n{icerik}\n```\n"
+    except Exception as e:
+        return f"\n> [Okunamadı: {e}]\n"
+
+def dizin_yapisi_getir(hedef_dizin):
+    """Verilen yoldan başlayarak dizin yapısını döndürür."""
+    yapı = "### 📂 Proje Dizin Yapısı ve Dosyalar\n\n"
+    
+    for kok, dizinler, dosyalar in os.walk(hedef_dizin):
+        # Filtreleme: Gereksiz klasörleri gezme
+        dizinler[:] = [d for d in dizinler if d.lower() not in DIKKATE_ALINMAYACAK_DIZINLER]
+        
+        yol_parcalari = kok.lower().split(os.sep)
+        if any(yasak in yol_parcalari for yasak in DIKKATE_ALINMAYACAK_DIZINLER):
+            continue
+
+        base_name = os.path.basename(kok)
+        goreli_yol = os.path.relpath(kok, hedef_dizin)
+        
+        # Ağaç yapısı başlığı
+        if goreli_yol == '.':
+            seviye = 0
+            yapı += f"- **{os.path.basename(hedef_dizin)}/** (Proje Kökü)\n"
+        else:
+            seviye = goreli_yol.count(os.sep) + 1
+            girinti = "  " * seviye
+            
+            # Özel klasör kontrolü (my_projects gibi)
+            if base_name in OZEL_USER_KLASORLERI:
+                yapı += f"{girinti}- **{base_name}/** (Kullanıcı Projeleri - İçerik Gizli)\n"
+                dizinler[:] = [] # Altına inme
+                continue 
+            else:
+                yapı += f"{girinti}- **{base_name}/**\n"
+
+        girinti_dosya = "  " * (seviye + 1)
+        
+        # DOSYALARI LİSTELEME (Filtresiz)
+        for dosya in sorted(dosyalar):
+            # .git klasörü içindeki dosyaları hariç tut, gerisi gelsin
+            if '.git' in yol_parcalari: continue
+            
+            yapı += f"{girinti_dosya}- {dosya}\n"
+                    
+    return yapı
+
+def ana_fonksiyon():
+    hedef_dizin = os.getcwd() 
+    proje_adi = os.path.basename(hedef_dizin)
+    
+    dokum_metni = f"# 📝 Proje Dökümü: {proje_adi}\n\n"
+    dokum_metni += f"Bu döküm, **{hedef_dizin}** dizini için oluşturulmuştur.\n"
+    dokum_metni += "Not: `my_projects` klasörünün içeriği gizlilik gereği hariç tutulmuştur.\n\n"
+    
+    print(f"1/3: '{proje_adi}' klasör yapısı taranıyor...")
+    dokum_metni += dizin_yapisi_getir(hedef_dizin)
+    
+    dokum_metni += "\n---\n"
+    dokum_metni += "### 💻 Kod İçeriği Dökümü\n\n"
+    
+    print("2/3: Kod içerikleri toplanıyor...")
+    
+    dosya_sayisi = 0
+    for kok, dizinler, dosyalar in os.walk(hedef_dizin):
+        dizinler[:] = [d for d in dizinler if d.lower() not in DIKKATE_ALINMAYACAK_DIZINLER]
+        
+        if os.path.basename(kok) in OZEL_USER_KLASORLERI:
+            dizinler[:] = []
+            continue
+
+        yol_parcalari = kok.lower().split(os.sep)
+        if any(yasak in yol_parcalari for yasak in DIKKATE_ALINMAYACAK_DIZINLER): continue
+
+        for dosya in sorted(dosyalar):
+            dosya_yolu = os.path.join(kok, dosya)
+            
+            # KENDİSİNİ VE ÇIKTI DOSYASINI OKUMASIN (İçerik Dökümünde)
+            if dosya == CIKTI_DOSYASI: continue
+            
+            uzanti = os.path.splitext(dosya)[1].lower()
+
+            if uzanti in BELGELENECEK_KOD_UZANTILARI:
+                goreli_yol = os.path.relpath(dosya_yolu, hedef_dizin)
+                dokum_metni += f"\n#### 📄 Dosya: `{goreli_yol}`\n"
+                dokum_metni += dosya_icerigini_getir(dosya_yolu)
+                dosya_sayisi += 1
+            
+    print(f"3/3: '{CIKTI_DOSYASI}' dosyasına kayıt yapılıyor...")
+    try:
+        cikti_yolu = os.path.join(hedef_dizin, CIKTI_DOSYASI)
+        with open(cikti_yolu, 'w', encoding='utf-8') as f:
+            f.write(dokum_metni)
+        print(f"\n✅ İşlem Başarılı! Toplam {dosya_sayisi} dosya belgelendi.")
+    except Exception as e:
+        print(f"\n❌ Hata: {e}")
+        
+if __name__ == "__main__":
+    ana_fonksiyon()
+```
+
+#### 📄 Dosya: `launcher.py`
+
+```py
+import os
+import sys
+import platform
+import subprocess
+import re
+import json
+import shutil
+from pathlib import Path
+from datetime import datetime
+
+# Renk kodları
+GREEN = '\033[92m'
+CYAN = '\033[96m'
+YELLOW = '\033[93m'
+RED = '\033[91m'
+GREY = '\033[90m'
+MAGENTA = '\033[95m'
+RESET = '\033[0m'
+
+# Config'den proje klasörünü al
+try:
+    import config
+    PROJECTS_ROOT = Path.cwd() / config.PROJECTS_DIR
+except ImportError:
+    # Config yoksa varsayılan
+    PROJECTS_ROOT = Path.cwd() / "my_projects"
+
+try:
+    from core.memory import MemoryManager
+except ImportError:
+    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+    from core.memory import MemoryManager
+
+def clear_screen():
+    os.system('cls' if os.name == 'nt' else 'clear')
+
+def ensure_workspace():
+    """Çalışma alanı klasörünü oluşturur."""
+    if not PROJECTS_ROOT.exists():
+        os.makedirs(PROJECTS_ROOT)
+
+def slugify(text):
+    text = text.lower()
+    text = text.replace('ı', 'i').replace('ğ', 'g').replace('ü', 'u').replace('ş', 's').replace('ö', 'o').replace('ç', 'c')
+    text = re.sub(r'[^a-z0-9]', '-', text)
+    text = re.sub(r'-+', '-', text)
+    return text.strip('-')
+
+def get_projects():
+    projects = []
+    ensure_workspace()
+    for entry in PROJECTS_ROOT.iterdir():
+        if entry.is_dir() and (entry / ".coder_memory").exists():
+            projects.append(entry)
+    return projects
+
+def get_project_stats(project_path: Path):
+    stats_file = project_path / ".project_stats.json"
+    total_cost = 0.0
+    last_updated = "-"
+    if stats_file.exists():
+        try:
+            with open(stats_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                total_cost = data.get("total_cost", 0.0)
+                last_updated = data.get("last_updated", "-")
+        except: pass
+    return total_cost, last_updated
+
+def export_project(project_path: Path):
+    """Projeyi taşınabilir ZIP formatına getirir."""
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M')
+    zip_name = f"{project_path.name}_BACKUP_{timestamp}"
+    zip_path = PROJECTS_ROOT / zip_name
+    
+    print(f"\n{CYAN}📦 Proje paketleniyor: {project_path.name}...{RESET}")
+    try:
+        shutil.make_archive(str(zip_path), 'zip', project_path)
+        print(f"{GREEN}✅ Yedek Oluşturuldu: {zip_path}.zip{RESET}")
+        print(f"{GREY}   (Bu dosyayı USB'ye atıp başka bilgisayara taşıyabilirsiniz){RESET}")
+        input(f"\nDevam etmek için Enter...")
+    except Exception as e:
+        print(f"{RED}Paketleme hatası: {e}{RESET}")
+        input()
+
+def create_new_project_wizard():
+    print(f"\n{CYAN}✨ YENİ PROJE OLUŞTUR{RESET}")
+    while True:
+        p_name = input(f"{YELLOW}1. Proje Adı: {RESET}").strip()
+        if p_name: break
+    
+    print(f"{CYAN}2. Açıklama{RESET}")
+    p_desc = input(f"{YELLOW}   Detay: {RESET}").strip()
+    if not p_desc: p_desc = f"{p_name} projesi."
+
+    suggested_folder = slugify(p_name)
+    p_folder = input(f"{YELLOW}3. Klasör Adı [{suggested_folder}]: {RESET}").strip()
+    if not p_folder: p_folder = suggested_folder
+        
+    # ARTIK ANA DİZİNE DEĞİL, MY_PROJECTS ALTINA KURUYORUZ
+    target_path = PROJECTS_ROOT / p_folder
+    
+    if target_path.exists():
+        print(f"\n{RED}❌ Hata: Bu isimde bir proje zaten var!{RESET}")
+        return None
+
+    try:
+        os.makedirs(target_path)
+        print(f"{CYAN}🧠 Hafıza kuruluyor...{RESET}")
+        memory = MemoryManager(project_root=str(target_path))
+        
+        readme_content = f"# {p_name}\n\n## Proje Hakkında\n{p_desc}\n\nBu proje Coder-Asistan ile oluşturuldu."
+        with open(target_path / "README.md", "w", encoding="utf-8") as f:
+            f.write(readme_content)
+            
+        memory.collection.upsert(
+            documents=[f"PROJE TANIMI: {p_desc}"],
+            embeddings=memory.embedder.encode([p_desc]).tolist(),
+            metadatas=[{"source": "project_init"}],
+            ids=["project_description"]
+        )
+        print(f"{GREEN}✅ Proje Hazır!{RESET}")
+        return target_path
+    except Exception as e:
+        print(f"{RED}Hata: {e}{RESET}")
+        return None
+
+def print_chat_history(project_path: Path):
+    log_file = project_path / ".chat_history.log"
+    if log_file.exists():
+        print(f"\n{GREY}📜 GEÇMİŞ KAYITLAR{RESET}")
+        try:
+            with open(log_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+                content = content.replace("👤 USER:", f"{YELLOW}👤 USER:{RESET}")
+                content = content.replace("🤖 AI:", f"{GREEN}🤖 AI:{RESET}")
+                content = content.replace("💰 MALİYET:", f"{MAGENTA}💰 MALİYET:{RESET}")
+                print(content)
+        except: pass
+    else:
+        print(f"\n{GREY}(Henüz geçmiş yok){RESET}")
+
+def launch_assistant(project_path):
+    clear_screen()
+    total_cost, last_upd = get_project_stats(project_path)
+    
+    print(f"{GREEN}📂 PROJE: {project_path.name}{RESET}")
+    print(f"{MAGENTA}💰 TOPLAM: ${total_cost:.5f}{RESET} {GREY}(Son: {last_upd}){RESET}")
+    
+    readme = project_path / "README.md"
+    if readme.exists():
+         with open(readme, 'r', encoding='utf-8') as f:
+             print(f"{CYAN}ℹ️  {f.readline().strip().replace('# ', '')}{RESET}")
+
+    print_chat_history(project_path)
+    print(f"{CYAN}----------------------------------------{RESET}")
+    print(f"{GREY}(Sohbet geçmişi yukarıda kalacaktır. Çıkış için 'b' yazın){RESET}\n")
+
+    while True:
+        task = input(f"{YELLOW}User (Siz) > {RESET}").strip()
+        if task.lower() == 'b': return
+        if not task: continue
+            
+        # Assistant scripti bir üst dizinde (ana kök dizinde)
+        assistant_script = Path(__file__).parent / "assistant.py"
+        cmd = [sys.executable, str(assistant_script), task]
+        
+        print(f"{CYAN}----------------------------------------{RESET}")
+        try:
+            subprocess.run(cmd, cwd=str(project_path))
+            print(f"{CYAN}----------------------------------------{RESET}")
+        except Exception as e:
+            print(f"{RED}Hata: {e}{RESET}")
+
+def main():
+    ensure_workspace()
+    
+    while True:
+        clear_screen()
+        projects = get_projects()
+        
+        if not projects:
+            create_new_project_wizard()
+            continue
+
+        print(f"{GREEN}╔══════════════════════════════════════════╗")
+        print(f"║   🚀 CODER-ASISTAN (Projeler: {len(projects)})      ║")
+        print(f"╚══════════════════════════════════════════╝{RESET}")
+        
+        for idx, proj in enumerate(projects, 1):
+            cost, _ = get_project_stats(proj)
+            print(f"[{idx}] {proj.name:<20} {MAGENTA}${cost:.4f}{RESET}")
+            
+        print(f"\n[{GREEN}N{RESET}] ✨ Yeni Proje")
+        print(f"[{CYAN}E{RESET}] 📦 Projeyi Paketle (Zip/Yedek)")
+        print(f"[{RED}Q{RESET}] 🚪 Çıkış")
+        
+        choice = input(f"\n{YELLOW}Seçim: {RESET}").strip().upper()
+        
+        if choice == 'Q': sys.exit()
+        elif choice == 'N':
+            new_proj = create_new_project_wizard()
+            if new_proj: launch_assistant(new_proj)
+        elif choice == 'E':
+            try:
+                p_idx = int(input("Paketlenecek proje numarası: "))
+                if 1 <= p_idx <= len(projects):
+                    export_project(projects[p_idx-1])
+            except ValueError: pass
+        elif choice.isdigit():
+            idx = int(choice)
+            if 1 <= idx <= len(projects):
+                launch_assistant(projects[idx-1])
+
+if __name__ == "__main__":
+    main()
+```
+
+#### 📄 Dosya: `migrate_projects.py`
+
+```py
+import os
+import shutil
+from pathlib import Path
+
+# Hedef
+TARGET_DIR = Path("my_projects")
+if not TARGET_DIR.exists():
+    os.makedirs(TARGET_DIR)
+
+print("🚚 Proje Taşıma İşlemi Başlıyor...")
+
+# Mevcut dizindeki klasörleri tara
+for entry in Path.cwd().iterdir():
+    # Kendi dizinimizdeki klasörler (my_projects hariç)
+    if entry.is_dir() and entry.name != "my_projects" and entry.name != "core" and entry.name != "venv" and not entry.name.startswith("."):
+        
+        # Eğer içinde .coder_memory varsa bu bir projedir!
+        if (entry / ".coder_memory").exists():
+            print(f"📦 Bulundu ve Taşınıyor: {entry.name}")
+            try:
+                shutil.move(str(entry), str(TARGET_DIR / entry.name))
+                print(f"   ✅ Taşındı.")
+            except Exception as e:
+                print(f"   ❌ Hata: {e}")
+
+print("\n🏁 İşlem Tamam. Artık launcher.py'yi çalıştırabilirsiniz.")
 ```
 
 #### 📄 Dosya: `model_selector.py`
@@ -523,6 +1040,296 @@ def select_model_interactive():
         return None
 ```
 
+#### 📄 Dosya: `readme.md`
+
+```md
+# 🚀 Coder-Asistan: AI Destekli Kodlama Stüdyosu
+
+![Python](https://img.shields.io/badge/python-3.10%252B-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Status](https://img.shields.io/badge/status-active-success)
+
+**Coder-Asistan**, sadece kod yazan bir bot değil; projelerinizi yöneten, hafızası olan ve bağlamı kaybetmeden çalışan **terminal tabanlı bir geliştirme ortamıdır.**
+
+Eski nesil botların aksine, her projeniz için ayrı bir "beyin" (Vektör Veritabanı) oluşturur. Böylece "A projesi" hakkında konuşurken, "B projesi" ile kafası karışmaz.
+
+---
+
+## ✨ Neden Farklı? (Yeni Mimari)
+
+* **🏭 Proje Fabrikası (`launcher.py`):** Tüm projelerinizi tek bir menüden yönetin. Yeni proje açın, eskisine geçin veya yedekleyip zipleyin.
+* **🧠 İzole Hafıza (RAG):** Her projenin kendi `.coder_memory` klasörü vardır. AI, o projeye ait tüm dosyaları okur ve hatırlar.
+* **💰 Maliyet Takibi:** Hangi proje ne kadar harcadı? Token başına maliyet hesaplar ve raporlar.
+* **🛡️ Güvenlik:** Kodları doğrudan yazmaz; önce JSON formatında plan sunar, onaylarsanız işler.
+* **🔌 Çoklu Model Desteği:** Google Gemini (Önerilen), Llama 3 (Groq), DeepSeek veya Hugging Face. Özgürsünüz.
+
+---
+
+## 📦 Kurulum Rehberi (Adım Adım)
+
+Bu bölüm, teknik bilgisi az olan kullanıcılar için **en basit haliyle** hazırlanmıştır. Lütfen işletim sisteminize uygun adımları takip edin.
+
+### 1️⃣ Projeyi İndirin
+
+Bilgisayarınızda projeyi kurmak istediğiniz klasöre gidin (Örn: Masaüstü) ve terminali açıp şu komutları yapıştırın:
+
+```bash
+git clone [https://github.com/cetincevizcetoli/coder-asistan.git](https://github.com/cetincevizcetoli/coder-asistan.git)
+cd coder-asistan
+```
+
+### 2️⃣ Sanal Ortam Oluşturun (ÖNEMLİ!)
+
+Bilgisayarınızdaki diğer Python projeleriyle çakışma olmaması için, bu projeye özel izole bir alan oluşturmalıyız.
+
+**🪟 Windows Kullanıcıları:**
+```cmd
+python -m venv venv
+venv\Scripts\activate
+```
+*(Komutu girdikten sonra satırın en başında `(venv)` yazısını görmelisiniz. Görmüyorsanız işlem başarısızdır.)*
+
+**🐧 Linux / macOS Kullanıcıları:**
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+### 3️⃣ Gerekli Kütüphaneleri Yükleyin
+
+```bash
+pip install -r requirements.txt
+```
+*(Bu işlem internet hızınıza göre 1-2 dakika sürebilir. Kırmızı bir hata yazısı görmediyseniz işlem tamamdır.)*
+
+---
+
+## 🔑 API Anahtarı (Motoru Çalıştırmak)
+
+Aracın çalışması için bir yapay zeka beynine ihtiyacı var. **Google Gemini (Ücretsiz ve Hızlı)** önerilir.
+
+### Adım A: Anahtarı Almak
+1.  [Google AI Studio](https://aistudio.google.com/app/apikey) adresine gidin.
+2.  Google hesabınızla giriş yapın.
+3.  **"Create API Key"** butonuna basın ve çıkan uzun şifreyi kopyalayın.
+
+### Adım B: Anahtarı Bilgisayara Tanıtmak
+
+**🪟 Windows İçin (Kalıcı Yöntem):**
+Terminalinize şu komutu yapıştırın (`Sizin_Keyiniz` kısmını değiştirmeyi unutmayın):
+```cmd
+setx GOOGLE_API_KEY "AIzaSyD_Sizin_Kopyaladiginiz_Uzun_Sifre"
+```
+⚠️ **KRİTİK UYARI:** Bu komutu yazdıktan sonra anahtarın geçerli olması için **açık olan tüm terminalleri ve VS Code'u kapatıp yeniden açmanız ŞARTTIR.** Aksi halde "Key bulunamadı" hatası alırsınız.
+
+**🐧 Linux / macOS İçin:**
+```bash
+echo 'export GOOGLE_API_KEY="AIzaSyD_Sizin_Uzun_Sifreniz"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+---
+
+## ▶️ Kullanım (Launcher Menüsü)
+
+Eskiden olduğu gibi karışık komutlar yazmanıza gerek yok. Artık her şeyi yöneten bir ana menümüz var.
+
+Sanal ortamınız aktifken (`venv` yazıyorken) şu komutu girin:
+
+```bash
+python launcher.py
+```
+
+Karşınıza şöyle bir ekran gelecek:
+
+```text
+╔══════════════════════════════════════════╗
+║   🚀 CODER-ASISTAN (Projeler: 2)         ║
+╚══════════════════════════════════════════╝
+[1] odev-projesi       $0.0042
+[2] web-sitesi         $0.1205
+
+[N] ✨ Yeni Proje
+[E] 📦 Projeyi Paketle (Zip/Yedek)
+[Q] 🚪 Çıkış
+```
+
+* **Yeni Başlayanlar:** `N` tuşuna basıp proje adını girin. Sistem sizin için `my_projects` klasöründe izole bir alan oluşturur.
+* **Çalışmaya Başlamak:** Listeden proje numarasını (Örn: `1`) seçin.
+* **Sohbet:** Açılan ekranda AI'ya ne yapması gerektiğini söyleyin:
+    * *"Bana basit bir hesap makinesi yap."*
+    * *"main.py dosyasındaki hatayı bul."*
+
+---
+
+## 🏗️ Yeni Proje Yapısı
+
+Dosyalarınız nerede? Bizim sistemimiz artık düzenli bir fabrika gibi çalışır:
+
+```text
+coder-asistan/
+├─ launcher.py            # 🎮 ANA KUMANDA (Bunu çalıştırın)
+├─ assistant.py           # 🧠 İşlem motoru
+├─ config.py              # ⚙️ Ayarlar
+├─ my_projects/           # 📂 SİZİN PROJELERİNİZ BURADA
+│  ├─ odev-projesi/       # 🔒 Proje 1 (İzole)
+│  │  ├─ .coder_memory/   # 🧠 Bu projenin hafızası
+│  │  ├─ src/             # Kodlarınız
+│  │  └─ README.md
+│  └─ web-sitesi/         # 🔒 Proje 2
+└─ requirements.txt
+```
+
+---
+
+## 🧩 Desteklenen Modeller
+
+`config.py` üzerinden modeli değiştirebilirsiniz, ancak varsayılanlar şöyledir:
+
+| Model | Hız | Maliyet | Not |
+| :--- | :--- | :--- | :--- |
+| **Gemini 2.5 Flash** | ⚡ Çok Hızlı | **Ücretsiz** | ✅ Başlangıç için en iyisi. |
+| **Llama 3.3 (Groq)** | 🚀 Işık Hızı | Ücretsiz | Kodlama mantığı çok güçlü. |
+| **DeepSeek Chat** | 🧠 Çok Zeki | Çok Ucuz | Karmaşık algoritmalar için ideal. |
+
+---
+
+## ❓ Sıkça Sorulan Sorular (Hata Çözümleri)
+
+**S: `ModuleNotFoundError: No module named 'google'` hatası alıyorum.**
+C: Kütüphaneler yüklenmemiş veya sanal ortam aktif değil.
+1. `venv\Scripts\activate` (Windows) veya `source venv/bin/activate` (Mac) yaptığınızdan emin olun.
+2. `pip install -r requirements.txt` komutunu tekrar çalıştırın.
+
+**S: `GOOGLE_API_KEY tanımlı değil` hatası alıyorum.**
+C: Anahtarı tanımladıktan sonra terminali kapatıp açmadınız. Windows'ta `setx` komutu, **yeni açılan** pencerelerde geçerli olur. VS Code'u tamamen kapatıp açın.
+
+**S: Hafıza (Memory) çalışmıyor veya hata veriyor.**
+C: Bilgisayarınızda C++ derleyicileri eksik olabilir (ChromaDB için gereklidir). Ancak endişelenmeyin, sistem otomatik olarak hafızasız moda geçip çalışmaya devam edecektir.
+
+---
+
+## 👤 Geliştirici
+
+**Ahmet Çetin** (cetincevizcetoli)
+* GitHub: [github.com/cetincevizcetoli](https://github.com/cetincevizcetoli)
+* Web: [yapanzeka.acetin.com.tr](https://yapanzeka.acetin.com.tr/)
+
+> *"Karmaşık kodları basitçe yönetin."*
+```
+
+#### 📄 Dosya: `requirements.txt`
+
+```txt
+google-genai
+requests
+# --- RAG ve Hafıza ---
+chromadb>=0.4.0
+sentence-transformers>=2.2.0
+torch>=2.0.0
+# --- Yardımcılar ---
+tqdm  # İndeksleme sırasında progress bar için (opsiyonel ama iyi pratik)
+```
+
+#### 📄 Dosya: `system_audit.py`
+
+```py
+import os
+import sys
+import sqlite3
+from pathlib import Path
+
+# Renkler
+GREEN = '\033[92m'
+RED = '\033[91m'
+YELLOW = '\033[93m'
+RESET = '\033[0m'
+
+def check_file_exists(path, description):
+    if os.path.exists(path):
+        size = os.path.getsize(path)
+        print(f"{GREEN}✅ {description} Mevcut ({size} bytes){RESET}")
+        return True
+    else:
+        print(f"{RED}❌ {description} BULUNAMADI! ({path}){RESET}")
+        return False
+
+def audit_log_file(project_path):
+    log_path = project_path / ".chat_history.log"
+    print(f"\n--- 📜 LOG DOSYASI KONTROLÜ ({log_path.name}) ---")
+    
+    if check_file_exists(log_path, "Log Dosyası"):
+        try:
+            with open(log_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+                print(f"   📄 Toplam Satır: {len(lines)}")
+                if len(lines) > 0:
+                    print(f"   🔍 Son Kayıt: {lines[-2].strip() if len(lines) > 1 else lines[0].strip()}")
+                else:
+                    print(f"{YELLOW}   ⚠️ Dosya var ama içi boş.{RESET}")
+        except Exception as e:
+            print(f"{RED}   ❌ Dosya okuma hatası: {e}{RESET}")
+
+def audit_vector_db(project_path):
+    db_path = project_path / ".coder_memory"
+    sqlite_file = db_path / "chroma.sqlite3"
+    
+    print(f"\n--- 🧠 VEKTÖR VERİTABANI KONTROLÜ ---")
+    
+    if not os.path.exists(db_path):
+        print(f"{RED}❌ .coder_memory klasörü yok.{RESET}")
+        return
+
+    if check_file_exists(sqlite_file, "ChromaDB SQLite Dosyası"):
+        try:
+            # ChromaDB kütüphanesini kullanmadan direkt SQL ile bütünlük testi
+            conn = sqlite3.connect(sqlite_file)
+            cursor = conn.cursor()
+            
+            # Tabloları say
+            cursor.execute("SELECT count(*) FROM sqlite_master WHERE type='table';")
+            tables = cursor.fetchone()[0]
+            print(f"   📊 Tablo Sayısı: {tables}")
+            
+            # Embedding sayısını bulmaya çalış (Chroma versiyonuna göre tablo adı değişebilir)
+            # Genelde 'embeddings' tablosudur.
+            try:
+                cursor.execute("SELECT count(*) FROM embeddings;")
+                count = cursor.fetchone()[0]
+                print(f"   🧬 İndekslenmiş Vektör Sayısı: {GREEN}{count}{RESET}")
+            except:
+                print(f"{YELLOW}   ⚠️ 'embeddings' tablosu direkt okunamadı (Chroma yapısı farklı olabilir).{RESET}")
+                
+            conn.close()
+            print(f"{GREEN}   ✅ Veritabanı bütünlüğü (Integrity) sağlam.{RESET}")
+            
+        except Exception as e:
+            print(f"{RED}   ❌ Veritabanı bozuk veya okunamıyor: {e}{RESET}")
+
+def main():
+    workspace = Path.cwd()
+    
+    # Projeleri bul
+    projects = [d for d in workspace.iterdir() if d.is_dir() and (d / ".coder_memory").exists()]
+    
+    if not projects:
+        print(f"{RED}Test edilecek proje bulunamadı.{RESET}")
+        return
+
+    print(f"🔍 {len(projects)} adet proje bulundu.")
+    
+    for proj in projects:
+        print(f"\n{YELLOW}========================================{RESET}")
+        print(f"📂 PROJE DENETLENİYOR: {proj.name}")
+        print(f"{YELLOW}========================================{RESET}")
+        
+        audit_log_file(proj)
+        audit_vector_db(proj)
+
+if __name__ == "__main__":
+    main()
+```
+
 #### 📄 Dosya: `core\base.py`
 
 ```py
@@ -616,7 +1423,6 @@ class DeepSeekModel(BaseModel):
 #### 📄 Dosya: `core\gemini.py`
 
 ```py
-# core/gemini.py
 import os
 from google import genai
 from google.genai import types
@@ -627,34 +1433,45 @@ class GeminiModel(BaseModel):
     def __init__(self):
         conf = MODEL_CONFIGS["gemini"]
         self.MODEL_NAME = conf["display_name"]
+        self.raw_model_name = conf["model_name"] # Fiyat hesaplaması için
         
-        # API Key'i ortamdan alıyoruz
         api_key = os.getenv(conf["env_var"])
         if not api_key:
             raise ModelAPIError(f"{conf['env_var']} bulunamadı.")
 
         try:
-            # Client başlat (Orijinal koddaki gibi sade)
             self.client = genai.Client(api_key=api_key)
-            self.model_id = conf["model_name"]
         except Exception as e:
             raise ModelAPIError(f"Gemini Client Başlatılamadı: {e}")
 
     def generate_content(self, system_instruction, prompt_text):
         try:
-            # --- ORİJİNAL YAPIYA DÖNÜLDÜ ---
-            # response_mime_type parametresi kaldırıldı, hata kaynağı buydu.
             response = self.client.models.generate_content(
-                model=self.model_id,
+                model=self.raw_model_name,
                 contents=[prompt_text],
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
                     temperature=0.1
                 )
             )
-            return response.text.strip()
+            
+            # Token kullanımını güvenli şekilde al
+            usage = {
+                "input_tokens": 0,
+                "output_tokens": 0
+            }
+            
+            if hasattr(response, 'usage_metadata'):
+                usage["input_tokens"] = response.usage_metadata.prompt_token_count
+                usage["output_tokens"] = response.usage_metadata.candidates_token_count
+
+            return {
+                "content": response.text.strip(),
+                "usage": usage,
+                "model_key": self.raw_model_name
+            }
+
         except Exception as e:
-            # Hata mesajını daha net görelim
             raise ModelAPIError(f"Gemini Hatası: {e}")
 ```
 
@@ -778,4 +1595,118 @@ class HuggingFaceModel(BaseModel):
 
         except Exception as e:
             raise ModelAPIError(f"HF API Hatası: {e}")
+```
+
+#### 📄 Dosya: `core\memory.py`
+
+```py
+import os
+import shutil
+import chromadb
+from chromadb.config import Settings
+from sentence_transformers import SentenceTransformer
+import torch
+import config
+from config import Colors
+
+class MemoryManager:
+    def __init__(self, project_root: str):
+        """
+        Belirtilen proje dizini için izole hafıza yöneticisi.
+        """
+        self.project_root = project_root
+        self.memory_path = os.path.join(project_root, config.MEMORY_DIR_NAME)
+        
+        # 1. Donanım Algılama ve Embedding Modelini Yükleme
+        self.device = self._detect_device()
+        print(f"{Colors.MAGENTA}🧠 Hafıza Motoru Başlatılıyor... ({self.device}){Colors.RESET}")
+        
+        try:
+            self.embedder = SentenceTransformer(config.EMBEDDING_MODEL, device=self.device)
+        except Exception as e:
+            print(f"{Colors.RED}Model yükleme hatası, CPU'ya geçiliyor: {e}{Colors.RESET}")
+            self.embedder = SentenceTransformer(config.EMBEDDING_MODEL, device="cpu")
+
+        # 2. ChromaDB İstemcisini Başlatma (Persistent)
+        os.makedirs(self.memory_path, exist_ok=True)
+        self.client = chromadb.PersistentClient(path=self.memory_path)
+        
+        # Koleksiyonu al veya oluştur
+        self.collection = self.client.get_or_create_collection(
+            name=config.COLLECTION_NAME,
+            metadata={"hnsw:space": "cosine"} # Kod benzerliği için kosinüs idealdir
+        )
+
+    def _detect_device(self) -> str:
+        """Sistemi tarar: NVIDIA GPU -> Apple Silicon (MPS) -> CPU"""
+        if torch.cuda.is_available():
+            return "cuda"
+        elif torch.backends.mps.is_available():
+            return "mps"
+        else:
+            return "cpu"
+
+    def index_files(self, file_paths: list):
+        """Dosyaları okur, vektörleştirir ve veritabanına kaydeder."""
+        documents = []
+        metadatas = []
+        ids = []
+
+        print(f"{Colors.CYAN}📥 {len(file_paths)} dosya indeksleniyor...{Colors.RESET}")
+
+        for fpath in file_paths:
+            full_path = os.path.join(self.project_root, fpath)
+            if not os.path.exists(full_path):
+                continue
+            
+            try:
+                with open(full_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+                # Basit chunking: Dosyayı olduğu gibi alıyoruz (küçük dosyalar için)
+                # Büyük projelerde buraya "TextSplitter" eklenmeli.
+                if len(content.strip()) == 0: continue
+
+                documents.append(content)
+                metadatas.append({"source": fpath})
+                ids.append(fpath) # ID olarak dosya yolu benzersizdir
+
+            except Exception as e:
+                print(f"{Colors.YELLOW}Uyarı: {fpath} okunamadı ({e}){Colors.RESET}")
+
+        if documents:
+            # Embedding işlemini manuel yapıp Chroma'ya veriyoruz (Daha fazla kontrol için)
+            embeddings = self.embedder.encode(documents, normalize_embeddings=True).tolist()
+            
+            # Upsert: Varsa güncelle, yoksa ekle
+            self.collection.upsert(
+                documents=documents,
+                embeddings=embeddings,
+                metadatas=metadatas,
+                ids=ids
+            )
+            print(f"{Colors.GREEN}✅ Hafıza güncellendi.{Colors.RESET}")
+
+    def query(self, prompt: str, n_results=config.MAX_CONTEXT_RESULTS):
+        """Prompt ile alakalı kod parçalarını getirir."""
+        query_embedding = self.embedder.encode([prompt], normalize_embeddings=True).tolist()
+        
+        results = self.collection.query(
+            query_embeddings=query_embedding,
+            n_results=n_results
+        )
+        
+        context_parts = []
+        if results['documents']:
+            for i, doc in enumerate(results['documents'][0]):
+                source = results['metadatas'][0][i]['source']
+                context_parts.append(f"--- BAĞLAM: {source} ---\n{doc}\n")
+        
+        return "\n".join(context_parts)
+
+    def clear_memory(self):
+        """Hafızayı sıfırlar."""
+        self.client.delete_collection(config.COLLECTION_NAME)
+        shutil.rmtree(self.memory_path)
+        print(f"{Colors.YELLOW}🧹 Hafıza temizlendi.{Colors.RESET}")
 ```
