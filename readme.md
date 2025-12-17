@@ -1,217 +1,173 @@
-# 🤖 Coder-Asistan: Terminal Tabanlı AI Kodlama Arkadaşınız
+# 🚀 Coder-Asistan: AI Destekli Kodlama Stüdyosu
 
-![Python](https://img.shields.io/badge/python-3.8%252B-blue)
+![Python](https://img.shields.io/badge/python-3.10%252B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Status](https://img.shields.io/badge/status-stable-success)
+![Status](https://img.shields.io/badge/status-active-success)
 
-**Coder-Asistan**, tarayıcı sekmeleri arasında kaybolmadan, doğrudan terminalinizden çıkmadan kod yazmanıza, dosya yönetmenize ve proje mimarisi kurmanıza yardımcı olan hafif, modüler ve güvenli bir CLI (Komut Satırı Arayüzü) aracıdır.
+**Coder-Asistan**, sadece kod yazan bir bot değil; projelerinizi yöneten, hafızası olan ve bağlamı kaybetmeden çalışan **terminal tabanlı bir geliştirme ortamıdır.**
 
-## 🚀 Neden Coder-Asistan?
-
-Piyasada birçok AI aracı varken neden bunu kullanmalısınız?
-
-*   **🔒 Tam Gizlilik & Güvenlik:** Sadece sizin belirlediğiniz dosyaları okur. Path Traversal koruması ile sisteminizin geri kalanına dokunmaz.
-*   **🔌 Model Agnostik:** Tek bir firmaya bağımlı kalmayın. İster Google Gemini (2.5 Flash) kullanın, ister açık kaynak Hugging Face (Qwen/Llama) modellerini.
-*   **🛠️ Otomatik Dosya Yönetimi:** Kodu sadece ekrana yazmaz; sizin onayınızla dosyaları oluşturur, klasörleri açar ve mevcut dosyaları günceller.
-*   **🛡️ Otomatik Yedekleme:** Bir dosyayı değiştirmeden önce `.gassist_backups` klasörüne yedeğini alır. Hata yapma korkusu yok!
-
-## 🏗️ Proje Mimarisi
-
-Bu proje, genişletilebilir ve modüler bir yapı üzerine kurulmuştur:
-
-*   `assistant.py`: Orkestra şefi. Kullanıcı girdisini alır, AI'ya iletir, gelen JSON yanıtını işler ve dosyaları yazar.
-*   `core/`: Farklı AI sağlayıcıları için adaptörler (Gemini, HF) burada bulunur. Yeni bir model eklemek için buraya bir dosya eklemeniz yeterlidir.
-*   `config.py`: Tüm ayarların (token limitleri, model isimleri) merkezi.
+Eski nesil botların aksine, her projeniz için ayrı bir "beyin" (Vektör Veritabanı) oluşturur. Böylece "A projesi" hakkında konuşurken, "B projesi" ile kafası karışmaz.
 
 ---
 
-## 📦 Kurulum
+## ✨ Neden Farklı? (Yeni Mimari)
 
-Projeyi bilgisayarınıza kurmak 2 dakikadan az sürer.
+* **🏭 Proje Fabrikası (`launcher.py`):** Tüm projelerinizi tek bir menüden yönetin. Yeni proje açın, eskisine geçin veya yedekleyip zipleyin.
+* **🧠 İzole Hafıza (RAG):** Her projenin kendi `.coder_memory` klasörü vardır. AI, o projeye ait tüm dosyaları okur ve hatırlar.
+* **💰 Maliyet Takibi:** Hangi proje ne kadar harcadı? Token başına maliyet hesaplar ve raporlar.
+* **🛡️ Güvenlik:** Kodları doğrudan yazmaz; önce JSON formatında plan sunar, onaylarsanız işler.
+* **🔌 Çoklu Model Desteği:** Google Gemini (Önerilen), Llama 3 (Groq), DeepSeek veya Hugging Face. Özgürsünüz.
 
-### 1. Depoyu Klonlayın
+---
+
+## 📦 Kurulum Rehberi (Adım Adım)
+
+Bu bölüm, teknik bilgisi az olan kullanıcılar için **en basit haliyle** hazırlanmıştır. Lütfen işletim sisteminize uygun adımları takip edin.
+
+### 1️⃣ Projeyi İndirin
+
+Bilgisayarınızda projeyi kurmak istediğiniz klasöre gidin (Örn: Masaüstü) ve terminali açıp şu komutları yapıştırın:
 
 ```bash
-git clone https://github.com/cetincevizcetoli/coder-asistan.git
+git clone [https://github.com/cetincevizcetoli/coder-asistan.git](https://github.com/cetincevizcetoli/coder-asistan.git)
 cd coder-asistan
 ```
 
-### 2. Sanal Ortamı Hazırlayın (Önerilen)
+### 2️⃣ Sanal Ortam Oluşturun (ÖNEMLİ!)
 
-Sistem kütüphanelerinizi kirletmemek için sanal ortam kullanın.
+Bilgisayarınızdaki diğer Python projeleriyle çakışma olmaması için, bu projeye özel izole bir alan oluşturmalıyız.
 
-**Linux/Mac:**
+**🪟 Windows Kullanıcıları:**
+```cmd
+python -m venv venv
+venv\Scripts\activate
+```
+*(Komutu girdikten sonra satırın en başında `(venv)` yazısını görmelisiniz. Görmüyorsanız işlem başarısızdır.)*
+
+**🐧 Linux / macOS Kullanıcıları:**
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 ```
 
-**Windows:**
-```bash
-python -m venv venv
-venv\Scripts\activate
-```
-
-### 3. Bağımlılıkları Yükleyin
+### 3️⃣ Gerekli Kütüphaneleri Yükleyin
 
 ```bash
 pip install -r requirements.txt
 ```
-### 4. API ANAHTAR
+*(Bu işlem internet hızınıza göre 1-2 dakika sürebilir. Kırmızı bir hata yazısı görmediyseniz işlem tamamdır.)*
 
-Projenin çalışması için bir API anahtarına ihtiyacınız var. .env.example dosyasındaki şablonu kullanabilirsiniz veya aşağıdaki komutlarla terminal üzerinden tanımlayabilirsiniz.
+---
 
-** Linux/Mac için (Kalıcı Yöntem):**
-Terminale şu komutları yazarak .bashrc (veya .zshrc) dosyanıza ekleyin:
-bash
+## 🔑 API Anahtarı (Motoru Çalıştırmak)
 
-** Google Gemini için (Önerilen - Ücretsiz & Hızlı) **
-```
-echo 'export GOOGLE_API_KEY="Sizin_Keyiniz_Buraya"' >> ~/.bashrc
-```
-** VEYA Hugging Face için **
-```
-echo 'export HUGGINGFACE_API_KEY="Sizin_Tokeniniz_Buraya"' >> ~/.bashrc
-```
+Aracın çalışması için bir yapay zeka beynine ihtiyacı var. **Google Gemini (Ücretsiz ve Hızlı)** önerilir.
 
-** Değişiklikleri uygula **
+### Adım A: Anahtarı Almak
+1.  [Google AI Studio](https://aistudio.google.com/app/apikey) adresine gidin.
+2.  Google hesabınızla giriş yapın.
+3.  **"Create API Key"** butonuna basın ve çıkan uzun şifreyi kopyalayın.
+
+### Adım B: Anahtarı Bilgisayara Tanıtmak
+
+**🪟 Windows İçin (Kalıcı Yöntem):**
+Terminalinize şu komutu yapıştırın (`Sizin_Keyiniz` kısmını değiştirmeyi unutmayın):
+```cmd
+setx GOOGLE_API_KEY "AIzaSyD_Sizin_Kopyaladiginiz_Uzun_Sifre"
 ```
+⚠️ **KRİTİK UYARI:** Bu komutu yazdıktan sonra anahtarın geçerli olması için **açık olan tüm terminalleri ve VS Code'u kapatıp yeniden açmanız ŞARTTIR.** Aksi halde "Key bulunamadı" hatası alırsınız.
+
+**🐧 Linux / macOS İçin:**
+```bash
+echo 'export GOOGLE_API_KEY="AIzaSyD_Sizin_Uzun_Sifreniz"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-** Windows için: **
+---
 
-Seçenek A: PowerShell (VS Code Varsayılan Terminali - Geçici)
-powershell
+## ▶️ Kullanım (Launcher Menüsü)
 
-** Google Gemini için **
-```
-$env:GOOGLE_API_KEY="Sizin_Keyiniz_Buraya"
-```
-** VEYA Hugging Face için **
-```
-$env:HUGGINGFACE_API_KEY="Sizin_Tokeniniz_Buraya"
-```
-Seçenek B: Command Prompt (CMD - Geçici)
-cmd
+Eskiden olduğu gibi karışık komutlar yazmanıza gerek yok. Artık her şeyi yöneten bir ana menümüz var.
 
-** Google Gemini için **
-```
-set GOOGLE_API_KEY=Sizin_Keyiniz_Buraya
-```
-** VEYA Hugging Face için **
-```
-set HUGGINGFACE_API_KEY=Sizin_Tokeniniz_Buraya
-```
-Seçenek C: Kalıcı Olarak Ayarlamak (Tavsiye Edilen)
-** Eğer her seferinde yazmak istemiyorsanız, terminalde şu komutu bir kez çalıştırın (CMD veya PowerShell fark etmez):**
-cmd
-```
-setx GOOGLE_API_KEY "Sizin_Keyiniz_Buraya"
-```
-(Not: setx komutundan sonra değişkenin geçerli olması için terminali veya VS Code'u kapatıp yeniden açmanız gerekir.)
-## 💻 Kullanım
-
-** Groq Linux için **
-```
-export GROQ_API_KEY='gsk_xxxxxxxxxxxxxxxxxxxxxxxx'
-```
-** Groq Windows için **
-```
-setx GROQ_API_KEY "Sizin_Keyiniz_Buraya"
-```
-
-Coder-Asistan bir CLI (Komut Satırı) aracıdır. Tüm komutlar terminal üzerinden verilir.
-
-### Temel Komut
+Sanal ortamınız aktifken (`venv` yazıyorken) şu komutu girin:
 
 ```bash
-# Ana kullanım şekli
-python assistant.py "Yapılacak işlemin tanımı"
+python launcher.py
 ```
 
-### Örnek Senaryolar
+Karşınıza şöyle bir ekran gelecek:
 
-**1. Sıfırdan Proje Başlatma:**
-```bash
-python assistant.py "Basit bir Flask projesi yap. app.py, requirements.txt ve templates/index.html dosyalarını oluştur."
+```text
+╔══════════════════════════════════════════╗
+║   🚀 CODER-ASISTAN (Projeler: 2)         ║
+╚══════════════════════════════════════════╝
+[1] odev-projesi       $0.0042
+[2] web-sitesi         $0.1205
+
+[N] ✨ Yeni Proje
+[E] 📦 Projeyi Paketle (Zip/Yedek)
+[Q] 🚪 Çıkış
 ```
 
-**2. Mevcut Dosyayı Düzenleme:**
-```bash
-python assistant.py "index.html dosyasını Bootstrap 5 kullanacak şekilde güncelle ve bir Navbar ekle."
-```
+* **Yeni Başlayanlar:** `N` tuşuna basıp proje adını girin. Sistem sizin için `my_projects` klasöründe izole bir alan oluşturur.
+* **Çalışmaya Başlamak:** Listeden proje numarasını (Örn: `1`) seçin.
+* **Sohbet:** Açılan ekranda AI'ya ne yapması gerektiğini söyleyin:
+    * *"Bana basit bir hesap makinesi yap."*
+    * *"main.py dosyasındaki hatayı bul."*
 
-**3. Hata Ayıklama (Debug):**
-```bash
-python assistant.py "app.py dosyasındaki hatayı bul ve düzelt."
+---
+
+## 🏗️ Yeni Proje Yapısı
+
+Dosyalarınız nerede? Bizim sistemimiz artık düzenli bir fabrika gibi çalışır:
+
+```text
+coder-asistan/
+├─ launcher.py            # 🎮 ANA KUMANDA (Bunu çalıştırın)
+├─ assistant.py           # 🧠 İşlem motoru
+├─ config.py              # ⚙️ Ayarlar
+├─ my_projects/           # 📂 SİZİN PROJELERİNİZ BURADA
+│  ├─ odev-projesi/       # 🔒 Proje 1 (İzole)
+│  │  ├─ .coder_memory/   # 🧠 Bu projenin hafızası
+│  │  ├─ src/             # Kodlarınız
+│  │  └─ README.md
+│  └─ web-sitesi/         # 🔒 Proje 2
+└─ requirements.txt
 ```
 
 ---
 
-## ⚙️ Yapılandırma (config.py)
+## 🧩 Desteklenen Modeller
 
-Projenin davranışlarını `config.py` dosyasından özelleştirebilirsiniz:
+`config.py` üzerinden modeli değiştirebilirsiniz, ancak varsayılanlar şöyledir:
 
-*   **MAX_FILE_SIZE:** İşlenebilecek maksimum dosya boyutu.
-*   **BACKUP_DIR:** Yedeklerin tutulacağı klasör.
-*   **MODEL_CONFIGS:** Kullanılan model sürümlerini buradan değiştirebilirsiniz (Örn: gemini-2.5-flash yerine pro sürümü).
-
-### 🎛️ Gelişmiş Parametreler
-
-**1. `--dry-run` (Prova Modu / Güvenli Mod)**
-Kodu oluşturur, planı gösterir ama **dosyalara yazmaz**. Değişiklikleri kaydetmeden önce görmek için idealdir.
-```bash
-python assistant.py "Snake oyunu yaz" --dry-run
-```
---
-
-verbose (Detaylı Log Modu) "Geveze" modudur. AI'dan gelen ham yanıtı, JSON temizleme sürecini ve olası gizli hataları detaylı gösterir. Hata ayıklamak (debug) için kullanılır.
-
-```bash
-python assistant.py "Hata veren bir dosya üzerinde çalış" --verbose
-```
-## 🛠️ Ekstra Araçlar
-
-Proje içinde, geliştirmeyi kolaylaştıran yardımcı bir script daha bulunur.
-
-### 📄 generate_docs.py (Proje Belgeleyici)
-
-Bu araç, projenizdeki tüm kod dosyalarını okur ve tek bir Markdown dosyasında (`proje_dokumu.md`) birleştirir.
-
-**Neden Kullanmalıyım?**
-*   Tüm projeyi tek bir dosyada toplayıp ChatGPT, Claude veya Gemini'ye "Bu projeyi analiz et" diyerek yapıştırmak için mükemmeldir.
-*   Proje yedeği almak veya dokümantasyon oluşturmak için idealdir.
-
-**Kullanım:**
-```bash
-python generate_docs.py
-```
+| Model | Hız | Maliyet | Not |
+| :--- | :--- | :--- | :--- |
+| **Gemini 2.5 Flash** | ⚡ Çok Hızlı | **Ücretsiz** | ✅ Başlangıç için en iyisi. |
+| **Llama 3.3 (Groq)** | 🚀 Işık Hızı | Ücretsiz | Kodlama mantığı çok güçlü. |
+| **DeepSeek Chat** | 🧠 Çok Zeki | Çok Ucuz | Karmaşık algoritmalar için ideal. |
 
 ---
 
-## 🤝 Katkıda Bulunma
+## ❓ Sıkça Sorulan Sorular (Hata Çözümleri)
 
-Pull request'ler kabul edilir! Büyük değişiklikler için önce bir Issue açarak tartışalım.
+**S: `ModuleNotFoundError: No module named 'google'` hatası alıyorum.**
+C: Kütüphaneler yüklenmemiş veya sanal ortam aktif değil.
+1. `venv\Scripts\activate` (Windows) veya `source venv/bin/activate` (Mac) yaptığınızdan emin olun.
+2. `pip install -r requirements.txt` komutunu tekrar çalıştırın.
 
-1.  Forklayın
-2.  Feature branch oluşturun (`git checkout -b feature/yenilik`)
-3.  Commit leyin (`git commit -m 'Yeni özellik eklendi'`)
-4.  Push layın (`git push origin feature/yenilik`)
-5.  PR açın
+**S: `GOOGLE_API_KEY tanımlı değil` hatası alıyorum.**
+C: Anahtarı tanımladıktan sonra terminali kapatıp açmadınız. Windows'ta `setx` komutu, **yeni açılan** pencerelerde geçerli olur. VS Code'u tamamen kapatıp açın.
 
----
-## 🧠 Katkıda Bulunanlar & Teknoloji Yığını
-
-Bu proje geliştirilirken aşağıdaki yapay zeka modellerinden ve açık kaynak kütüphanelerden güç alınmıştır:
-
-### 🤖 Yapay Zeka (AI)
-*   **Google Gemini (2.5 Flash):** Projenin ana mantıksal motoru ve kod üreticisi.
-*   **Hugging Face (Qwen/Llama):** Açık kaynak model entegrasyonu ve alternatif zeka.
-
-### 🛠️ Altyapı & Kütüphaneler
-*   **Python 3.8+:** Ana geliştirme dili.
-*   **Google GenAI SDK:** Gemini API bağlantısı.
+**S: Hafıza (Memory) çalışmıyor veya hata veriyor.**
+C: Bilgisayarınızda C++ derleyicileri eksik olabilir (ChromaDB için gereklidir). Ancak endişelenmeyin, sistem otomatik olarak hafızasız moda geçip çalışmaya devam edecektir.
 
 ---
-**Geliştirici:** Ahmet Çetin (cetincevizcetoli)
+
+## 👤 Geliştirici
+
+**Ahmet Çetin** (cetincevizcetoli)
+* GitHub: [github.com/cetincevizcetoli](https://github.com/cetincevizcetoli)
+* Web: [yapanzeka.acetin.com.tr](https://yapanzeka.acetin.com.tr/)
+
+> *"Karmaşık kodları basitçe yönetin."*
