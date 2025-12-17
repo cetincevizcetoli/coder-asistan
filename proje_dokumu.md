@@ -7,6 +7,7 @@ Not: `my_projects` klasörünün içeriği gizlilik gereği hariç tutulmuştur.
 
 - **coder-asistan/** (Proje Kökü)
   - .gitignore
+  - ARCHITECTURE.md
   - assistant.py
   - check_models.py
   - config.py
@@ -32,6 +33,147 @@ Not: `my_projects` klasörünün içeriği gizlilik gereği hariç tutulmuştur.
 ### 💻 Kod İçeriği Dökümü
 
 
+#### 📄 Dosya: `ARCHITECTURE.md`
+
+```md
+# 🏗️ Coder-Asistan: Teknik Mimari ve Geliştirici Kılavuzu
+
+Bu belge, **Coder-Asistan** projesinin iç yapısını, veri akışını, tasarım kararlarını ve sistemin "neden" böyle çalıştığını anlatan teknik referanstır.
+
+Proje, basit bir script değil; modüler, RAG (Retrieval-Augmented Generation) tabanlı ve durum (state) korumalı bir **CLI Kodlama Stüdyosu**dur.
+
+---
+
+## 1. 🗺️ Kuş Bakışı Sistem Mimarisi
+
+Sistem 4 ana katmandan oluşur:
+
+1.  **Yönetim Katmanı (Launcher):** Kullanıcıyı karşılar, proje izolasyonunu sağlar ve çalışma dizinini ayarlar.
+2.  **Beyin Katmanı (Assistant & Config):** Kullanıcı isteğini işler, maliyeti hesaplar ve AI'ya "JSON formatında" emir verir.
+3.  **Hafıza Katmanı (RAG Core):** Projedeki kodları vektörleştirir (Embedding) ve anlamsal arama yapar.
+4.  **Adaptör Katmanı (Model Core):** Farklı AI sağlayıcılarını (Gemini, Groq, HF) tek bir standart arayüze dönüştürür.
+
+
+```text
+      [ KULLANICI ]
+           │
+           ▼
+  ┌─────────────────┐
+  │   LAUNCHER.PY   │  (1. Giriş Kapısı & Proje Seçimi)
+  └────────┬────────┘
+           │
+           ▼
+  ┌─────────────────┐       ┌───────────────────┐
+  │  ASSISTANT.PY   │ ◄───► │  CONFIG (Kurallar)│
+  │ (Karar Motoru)  │       └───────────────────┘
+  └────────┬────────┘
+           │
+           ├───► [ 🧠 HAFIZA (RAG) ] ◄─── (.coder_memory)
+           │      (Kodları Hatırlar)
+           │
+           ▼
+  ┌─────────────────┐
+  │   MODEL CORE    │  (Adaptör Katmanı)
+  └────────┬────────┘
+           │
+           ├───► Google Gemini
+           ├───► Groq Llama 3
+           └───► DeepSeek / HF
+
+---
+
+## 2. 📂 Dizin Yapısı ve Sorumluluklar
+
+```text
+coder-asistan/
+├── launcher.py           # [ENTRY POINT] Proje seçimi ve ortam hazırlığı
+├── assistant.py          # [MAIN LOOP] İstek-Cevap döngüsü ve dosya işlemleri
+├── config.py             # [SETTINGS] Sabitler, Promptlar ve Fiyatlandırma
+├── requirements.txt      # Bağımlılıklar
+│
+├── my_projects/          # [USER DATA] Kullanıcı projelerinin fiziksel konumu
+│   └── proje_x/          # -> İzole Çalışma Alanı
+│       ├── .coder_memory/ # -> ChromaDB (Vektör Veritabanı)
+│       ├── .chat_history/ # -> Loglar
+│       └── src/           # -> Kullanıcı Kodları
+│
+├── core/                 # [BACKEND] Sistem çekirdeği
+│   ├── base.py           # -> Soyut Model Sınıfı (Interface)
+│   ├── memory.py         # -> RAG Motoru (SentenceTransformers + ChromaDB)
+│   ├── gemini.py         # -> Google Adapter
+│   └── groq.py           # -> Groq Adapter
+│
+└── utils/ (Opsiyonel)    # Yardımcı araçlar (debug.py, system_audit.py vb.)
+```
+
+---
+
+## 3. ⚙️ Veri Akışı (Bir Komutun Yolculuğu)
+
+Kullanıcı `python launcher.py` çalıştırıp bir projeye girdiğinde ve "Hatayı düzelt" dediğinde arka planda şu olaylar zinciri gerçekleşir:
+
+### Adım 1: Bağlamın Yüklenmesi (Context Loading)
+* `assistant.py`, `core.memory.MemoryManager`'ı başlatır.
+* Kullanıcının sorusu ("Hatayı düzelt"), `SentenceTransformer` modeli ile **vektöre** (sayısal diziye) çevrilir.
+* ChromaDB içinde bu vektöre matematiksel olarak en yakın olan kod parçaları (Chunks) bulunur.
+
+### Adım 2: Prompt Mühendisliği (Prompt Engineering)
+AI'ya giden metin şu şablonda birleştirilir:
+1.  **Sistem Emri (`config.SYSTEM_INSTRUCTION`):** "Sen bir JSON makinesisin. Asla sohbet etme."
+2.  **RAG Bağlamı:** "Veritabanından bulduğum ilgili kodlar şunlar: ..."
+3.  **Kullanıcı İsteği:** "Hatayı düzelt."
+
+### Adım 3: Model Çağrısı ve Adaptasyon
+* Seçili model (Örn: Gemini), `core/gemini.py` üzerinden çağrılır.
+* Her model farklı yanıt verse de (Object, Dict, Text), adaptörler bunu standart bir formata çevirir.
+
+### Adım 4: JSON Temizliği ve Güvenlik
+* AI'dan gelen yanıt `clean_json_string()` fonksiyonuna girer. Markdown etiketleri (` ```json `) temizlenir.
+* Saf JSON parse edilir.
+* **Güvenlik:** AI "Bilgisayarı kapat" diyemez. Sadece `dosya_olustur` veya `dosya_sil` komutları işlenir.
+
+### Adım 5: İşlem ve Yedekleme
+* Dosya yazılmadan önce `backup_file()` fonksiyonu devreye girer.
+* Hedef dosyanın bir kopyası `.gassist_backups` klasörüne zaman damgasıyla (timestamp) kaydedilir.
+* Yeni içerik yazılır.
+
+---
+
+## 4. 🔧 Kritik Konfigürasyonlar (`config.py`)
+
+Geliştiricilerin bilmesi gereken hassas ayarlar:
+
+* **`SYSTEM_INSTRUCTION`:** Sistemsel prompt. AI'nın "Suskun" olmasını sağlayan yer burasıdır. Buradaki kurallar gevşetilirse sistemin JSON parse yeteneği bozulabilir.
+* **`MAX_FILE_SIZE`:** Varsayılan 5MB. AI'nın token limitini patlatmaması için büyük dosyalar (loglar, binaryler) okunmaz.
+* **`PRICING_RATES`:** Maliyet hesaplama tablosu. Statiktir, API fiyatları değişirse manuel güncellenmelidir.
+
+---
+
+## 5. 🛠️ Geliştirici Araç Seti (DevTools)
+
+Projeyi debug etmek veya yönetmek için kullanılan "İsviçre Çakısı" araçları:
+
+| Araç | Dosya | Görevi |
+| :--- | :--- | :--- |
+| **Hafıza Müfettişi** | `debug.py` | ChromaDB veritabanına bağlanır, vektörleri ve kayıtlı kod parçalarını ham haliyle gösterir. |
+| **Sistem Doktoru** | `system_audit.py` | Dosya izinlerini, log boyutlarını ve veritabanı bütünlüğünü (integrity) kontrol eder. |
+| **Proje Taşıyıcı** | `migrate_projects.py` | `my_projects` dışındaki "sahipsiz" projeleri bulup içeriye taşır. |
+| **Belgeleyici** | `generate_docs.py` | Tüm kod yapısını tek bir Markdown dosyasına döker (LLM analizi için). |
+
+---
+
+## 6. 🚀 Gelecek Planları ve Genişletilebilirlik
+
+Bu mimari şunlara izin verecek şekilde tasarlanmıştır:
+* **Yeni Model Ekleme:** Sadece `core/` altına yeni bir `.py` dosyası ekleyerek.
+* **Resim Desteği:** `assistant.py` güncellenerek Gemini 1.5 Pro'nun Vision özellikleri açılabilir.
+* **Web Arayüzü:** Logic (Mantık) ve UI (Arayüz) ayrıldığı için, `launcher.py` yerine bir `app.py` (Flask/Streamlit) yazılarak kolayca web'e taşınabilir.
+
+---
+**Geliştirici:** Ahmet Çetin
+*Bu doküman Coder-Asistan v2.0 mimarisini yansıtır.*
+```
+
 #### 📄 Dosya: `assistant.py`
 
 ```py
@@ -43,7 +185,7 @@ import shutil
 import time
 import requests
 from datetime import datetime
-from typing import List, Optional, Any, Tuple
+from typing import List, Optional, Any, Tuple, Dict
 
 # --- PROJE MODÜLLERİ ---
 import config
@@ -74,10 +216,46 @@ def is_safe_path(file_path: str, current_directory: str) -> bool:
     full_path = os.path.join(current_directory, file_path)
     return os.path.realpath(full_path).startswith(current_directory)
 
-def clean_json_string(json_str: str) -> str:
-    if "```" in json_str:
-        json_str = re.sub(r"```json\n?|```", "", json_str)
-    return json_str.strip()
+def clean_json_string(json_string: str) -> Optional[Dict]:
+    """
+    AI'dan gelen yanıtı temizler ve parse eder.
+    GELİŞTİRİLMİŞ VERSİYON: Hata olursa programı çökertmek yerine None döner.
+    """
+    try:
+        # Markdown kod bloklarını temizle (```json ... ```)
+        if "```" in json_string:
+            lines = json_string.split('\n')
+            clean_lines = []
+            capture = False
+            for line in lines:
+                if "```" in line:
+                    capture = not capture # Blok başladı/bitti
+                    continue
+                if capture:
+                    clean_lines.append(line)
+            
+            # Eğer kod bloğu bulduysak onu kullan, bulamadıysak (sadece ``` varsa) ham metni temizle
+            if clean_lines:
+                json_string = "\n".join(clean_lines)
+            else:
+                json_string = json_string.replace("```json", "").replace("```", "")
+
+        # Temizlik sonrası kalan boşlukları al
+        json_string = json_string.strip()
+        
+        # Olası fazlalıkları temizle (Bazen AI en sona açıklama ekler)
+        if json_string.rfind('}') != -1:
+            json_string = json_string[:json_string.rfind('}')+1]
+
+        # JSON Parse Denemesi
+        return json.loads(json_string)
+
+    except json.JSONDecodeError:
+        print(f"\n{Colors.RED}❌ AI Yanıtı JSON Formatına Uymuyor!{Colors.RESET}")
+        return None
+    except Exception as e:
+        print(f"{Colors.RED}❌ Beklenmeyen JSON Hatası: {e}{Colors.RESET}")
+        return None
 
 def backup_file(full_path: str) -> Optional[str]:
     if not os.path.exists(full_path): return None
@@ -97,7 +275,6 @@ def log_conversation(working_dir: str, user_prompt: str, ai_explanation: str, mo
     log_file = os.path.join(working_dir, ".chat_history.log")
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M')
     
-    # YENİ: Maliyet satırı eklendi
     log_entry = (
         f"════════════════════════════════════════════════════════════\n"
         f"📅 ZAMAN: {timestamp} | 🤖 MODEL: {model_name}\n"
@@ -220,18 +397,18 @@ def main_process(prompt_text: str, model_instance: Any, working_dir: str, is_dry
             else:
                 raw_text = response_data["content"]; usage_info = response_data["usage"]; model_key_used = response_data["model_key"]
 
-            clean_response = clean_json_string(raw_text)
+            # --- GÜVENLİ PARSE İŞLEMİ (DÜZELTİLDİ) ---
+            # Artık clean_json_string direkt olarak dictionary veya None dönüyor
+            ai_response_plan = clean_json_string(raw_text)
             
-            try:
-                ai_response_plan = json.loads(clean_response)
-            except json.JSONDecodeError:
-                print(f"{Colors.YELLOW}⚠️ Uyarı: AI eski formatta yanıt verdi, dönüştürülüyor...{Colors.RESET}")
-                temp_dict = json.loads(clean_response)
-                ai_response_plan = {
-                    "aciklama": "AI açıklama sağlamadı.",
-                    "dosya_olustur": temp_dict,
-                    "dosya_sil": []
-                }
+            if ai_response_plan is None:
+                print(f"{Colors.RED}⚠️ AI geçersiz format üretti. Tekrar deneniyor...{Colors.RESET}")
+                # İsterseniz burada 'continue' diyerek AI'ya tekrar sordurabilirsiniz
+                # Ancak sonsuz döngüye girmemesi için şimdilik çıkış yapıyoruz veya kullanıcıya soruyoruz.
+                if input("Format bozuk. Tekrar denesin mi? (e/h): ").lower() == 'e':
+                    continue
+                else:
+                    return
 
             # --- MALİYET HESAPLAMA ---
             current_cost, total_cost = update_project_stats(working_dir, usage_info, model_key_used)
@@ -1251,7 +1428,12 @@ coder-asistan/
 * **⚙️ İnce Ayarlar:** Dosya boyutu sınırlarını veya maliyet hesaplama yöntemini değiştirmek isterseniz `config.py` dosyasını düzenleyebilirsiniz.
 
 ---
+## 🤝 Katkıda Bulunma
 
+Pull request'ler kabul edilir! Büyük değişiklikler için önce bir Issue açarak tartışalım.
+
+> 🏗️ **Geliştirici Notu:** Bu projenin iç yapısını, veri akışını ve teknik detaylarını derinlemesine incelemek için lütfen **[MİMARİ VE TEKNİK KILAVUZ (ARCHITECTURE.md)](ARCHITECTURE.md)** dosyasını okuyunuz.
+---
 ## 👤 Geliştirici
 
 **Ahmet Çetin**

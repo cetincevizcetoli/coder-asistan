@@ -15,6 +15,33 @@ Sistem 4 ana katmandan oluşur:
 3.  **Hafıza Katmanı (RAG Core):** Projedeki kodları vektörleştirir (Embedding) ve anlamsal arama yapar.
 4.  **Adaptör Katmanı (Model Core):** Farklı AI sağlayıcılarını (Gemini, Groq, HF) tek bir standart arayüze dönüştürür.
 
+
+```text
+      [ KULLANICI ]
+           │
+           ▼
+  ┌─────────────────┐
+  │   LAUNCHER.PY   │  (1. Giriş Kapısı & Proje Seçimi)
+  └────────┬────────┘
+           │
+           ▼
+  ┌─────────────────┐       ┌───────────────────┐
+  │  ASSISTANT.PY   │ ◄───► │  CONFIG (Kurallar)│
+  │ (Karar Motoru)  │       └───────────────────┘
+  └────────┬────────┘
+           │
+           ├───► [ 🧠 HAFIZA (RAG) ] ◄─── (.coder_memory)
+           │      (Kodları Hatırlar)
+           │
+           ▼
+  ┌─────────────────┐
+  │   MODEL CORE    │  (Adaptör Katmanı)
+  └────────┬────────┘
+           │
+           ├───► Google Gemini
+           ├───► Groq Llama 3
+           └───► DeepSeek / HF
+
 ---
 
 ## 2. 📂 Dizin Yapısı ve Sorumluluklar

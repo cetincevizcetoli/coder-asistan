@@ -6,7 +6,7 @@ import shutil
 import time
 import requests
 from datetime import datetime
-from typing import List, Optional, Any, Tuple
+from typing import List, Optional, Any, Tuple, Dict
 
 # --- PROJE MODÜLLERİ ---
 import config
@@ -37,10 +37,46 @@ def is_safe_path(file_path: str, current_directory: str) -> bool:
     full_path = os.path.join(current_directory, file_path)
     return os.path.realpath(full_path).startswith(current_directory)
 
-def clean_json_string(json_str: str) -> str:
-    if "```" in json_str:
-        json_str = re.sub(r"```json\n?|```", "", json_str)
-    return json_str.strip()
+def clean_json_string(json_string: str) -> Optional[Dict]:
+    """
+    AI'dan gelen yanıtı temizler ve parse eder.
+    GELİŞTİRİLMİŞ VERSİYON: Hata olursa programı çökertmek yerine None döner.
+    """
+    try:
+        # Markdown kod bloklarını temizle (```json ... ```)
+        if "```" in json_string:
+            lines = json_string.split('\n')
+            clean_lines = []
+            capture = False
+            for line in lines:
+                if "```" in line:
+                    capture = not capture # Blok başladı/bitti
+                    continue
+                if capture:
+                    clean_lines.append(line)
+            
+            # Eğer kod bloğu bulduysak onu kullan, bulamadıysak (sadece ``` varsa) ham metni temizle
+            if clean_lines:
+                json_string = "\n".join(clean_lines)
+            else:
+                json_string = json_string.replace("```json", "").replace("```", "")
+
+        # Temizlik sonrası kalan boşlukları al
+        json_string = json_string.strip()
+        
+        # Olası fazlalıkları temizle (Bazen AI en sona açıklama ekler)
+        if json_string.rfind('}') != -1:
+            json_string = json_string[:json_string.rfind('}')+1]
+
+        # JSON Parse Denemesi
+        return json.loads(json_string)
+
+    except json.JSONDecodeError:
+        print(f"\n{Colors.RED}❌ AI Yanıtı JSON Formatına Uymuyor!{Colors.RESET}")
+        return None
+    except Exception as e:
+        print(f"{Colors.RED}❌ Beklenmeyen JSON Hatası: {e}{Colors.RESET}")
+        return None
 
 def backup_file(full_path: str) -> Optional[str]:
     if not os.path.exists(full_path): return None
@@ -60,7 +96,6 @@ def log_conversation(working_dir: str, user_prompt: str, ai_explanation: str, mo
     log_file = os.path.join(working_dir, ".chat_history.log")
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M')
     
-    # YENİ: Maliyet satırı eklendi
     log_entry = (
         f"════════════════════════════════════════════════════════════\n"
         f"📅 ZAMAN: {timestamp} | 🤖 MODEL: {model_name}\n"
@@ -183,18 +218,18 @@ def main_process(prompt_text: str, model_instance: Any, working_dir: str, is_dry
             else:
                 raw_text = response_data["content"]; usage_info = response_data["usage"]; model_key_used = response_data["model_key"]
 
-            clean_response = clean_json_string(raw_text)
+            # --- GÜVENLİ PARSE İŞLEMİ (DÜZELTİLDİ) ---
+            # Artık clean_json_string direkt olarak dictionary veya None dönüyor
+            ai_response_plan = clean_json_string(raw_text)
             
-            try:
-                ai_response_plan = json.loads(clean_response)
-            except json.JSONDecodeError:
-                print(f"{Colors.YELLOW}⚠️ Uyarı: AI eski formatta yanıt verdi, dönüştürülüyor...{Colors.RESET}")
-                temp_dict = json.loads(clean_response)
-                ai_response_plan = {
-                    "aciklama": "AI açıklama sağlamadı.",
-                    "dosya_olustur": temp_dict,
-                    "dosya_sil": []
-                }
+            if ai_response_plan is None:
+                print(f"{Colors.RED}⚠️ AI geçersiz format üretti. Tekrar deneniyor...{Colors.RESET}")
+                # İsterseniz burada 'continue' diyerek AI'ya tekrar sordurabilirsiniz
+                # Ancak sonsuz döngüye girmemesi için şimdilik çıkış yapıyoruz veya kullanıcıya soruyoruz.
+                if input("Format bozuk. Tekrar denesin mi? (e/h): ").lower() == 'e':
+                    continue
+                else:
+                    return
 
             # --- MALİYET HESAPLAMA ---
             current_cost, total_cost = update_project_stats(working_dir, usage_info, model_key_used)

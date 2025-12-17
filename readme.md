@@ -177,8 +177,7 @@ coder-asistan/
 
 Pull request'ler kabul edilir! Büyük değişiklikler için önce bir Issue açarak tartışalım.
 
-> 💡 **Geliştiriciler İçin:** Projenin iç yapısını, veri akışını ve teknik detaylarını anlamak için lütfen **[MİMARİ VE TEKNİK KILAVUZ (ARCHITECTURE.md)](ARCHITECTURE.md)** dosyasını okuyunuz.
-
+> 🏗️ **Geliştirici Notu:** Bu projenin iç yapısını, veri akışını ve teknik detaylarını derinlemesine incelemek için lütfen **[MİMARİ VE TEKNİK KILAVUZ (ARCHITECTURE.md)](ARCHITECTURE.md)** dosyasını okuyunuz.
 ---
 ## 👤 Geliştirici
 
