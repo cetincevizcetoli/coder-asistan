@@ -173,7 +173,13 @@ coder-asistan/
 * **⚙️ İnce Ayarlar:** Dosya boyutu sınırlarını veya maliyet hesaplama yöntemini değiştirmek isterseniz `config.py` dosyasını düzenleyebilirsiniz.
 
 ---
+## 🤝 Katkıda Bulunma
 
+Pull request'ler kabul edilir! Büyük değişiklikler için önce bir Issue açarak tartışalım.
+
+> 💡 **Geliştiriciler İçin:** Projenin iç yapısını, veri akışını ve teknik detaylarını anlamak için lütfen **[MİMARİ VE TEKNİK KILAVUZ (ARCHITECTURE.md)](ARCHITECTURE.md)** dosyasını okuyunuz.
+
+---
 ## 👤 Geliştirici
 
 **Ahmet Çetin**
