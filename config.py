@@ -23,7 +23,7 @@ BACKUP_DIR = ".gassist_backups"
 MAX_BACKUPS_PER_FILE = 5
 MEMORY_DIR_NAME = ".coder_memory"
 COLLECTION_NAME = "project_codebase"
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+EMBEDDING_MODEL = "paraphrase-multilingual-MiniLM-L12-v2"
 MAX_CONTEXT_RESULTS = 3
 MAX_CONTEXT_CHARS = 12000
 MAX_BACKUPS_PER_FILE = 10
@@ -47,6 +47,7 @@ PRICING_RATES = {
 # ==========================================
 # 🤖 MODEL AYARLARI
 # ==========================================
+
 MODEL_CONFIGS = {
     "gemini": {
         "env_var": "GOOGLE_API_KEY",
@@ -69,6 +70,13 @@ MODEL_CONFIGS = {
         "display_name": "Hugging Face Qwen",
     }
 }
+ACTIVE_PROFILE = 'gemini'
+# ==========================================
+# 🚀 AKTİF PROFİL SEÇİMİ (Eksik Olan Kısım)
+# ==========================================
+# Buraya MODEL_CONFIGS içindeki anahtarlardan birini yazmalısın:
+# Seçenekler: 'gemini', 'groq', 'deepseek', 'huggingface'
+
 
 # ==========================================
 # 🧠 YENİ AI SİSTEM TALİMATI (Akıllı JSON Modu)
@@ -88,3 +96,36 @@ SYSTEM_INSTRUCTION = (
     "4. Asla Markdown (```json ... ```) kullanma, sadece saf JSON döndür.\n"
     "5. Türkçe karakterleri UTF-8 olarak koru."
 )
+
+
+# ==========================================
+# 🧠 HAFIZA PROFİLLERİ (Menüde Görünecekler)
+# ==========================================
+MEMORY_PROFILES = {
+    "1": {
+        "model_name": "all-MiniLM-L6-v2",
+        "display": "Hafif (Light)",
+        "desc": "🚀 En Hızlısı | Düşük RAM | 384 Boyut | Genel projeler için ideal.",
+        "dim": 384
+    },
+    "2": {
+        "model_name": "paraphrase-multilingual-MiniLM-L12-v2",
+        "display": "Dengeli (Medium)",
+        "desc": "⚖️  Daha İyi Türkçe | Orta Hız | 384 Boyut | Karmaşık metinler için.",
+        "dim": 384
+    },
+    "3": {
+        "model_name": "all-mpnet-base-v2",
+        "display": "Güçlü (Heavy)",
+        "desc": "🧠 En Yüksek Doğruluk | Yavaş | 768 Boyut | Akademik/Derin analiz için.",
+        "dim": 768
+    }
+}
+# ==========================================
+# 🚀 AKTİF MODEL VE HAFIZA SEÇİMİ
+# ==========================================
+# Seçenekler: 'gemini', 'groq', 'deepseek', 'huggingface'
+ACTIVE_MODEL = "gemini" 
+
+# Hafıza Ayarı
+EMBEDDING_MODEL = "paraphrase-multilingual-MiniLM-L12-v2"

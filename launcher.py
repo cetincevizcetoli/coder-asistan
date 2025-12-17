@@ -1,216 +1,168 @@
 import os
 import sys
-import platform
-import subprocess
-import re
 import json
-import shutil
-from pathlib import Path
-from datetime import datetime
+import time
+import datetime
+import importlib
 
-# Renk kodları
-GREEN = '\033[92m'
-CYAN = '\033[96m'
-YELLOW = '\033[93m'
-RED = '\033[91m'
-GREY = '\033[90m'
-MAGENTA = '\033[95m'
-RESET = '\033[0m'
-
-# Config'den proje klasörünü al
 try:
     import config
-    PROJECTS_ROOT = Path.cwd() / config.PROJECTS_DIR
 except ImportError:
-    # Config yoksa varsayılan
-    PROJECTS_ROOT = Path.cwd() / "my_projects"
+    print("HATA: config.py bulunamadı!")
+    sys.exit(1)
 
-try:
-    from core.memory import MemoryManager
-except ImportError:
-    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-    from core.memory import MemoryManager
+# ==========================================
+# AYAR SEÇENEKLERİ
+# ==========================================
+MEMORY_OPTIONS = {
+    "1": {"id": "all-MiniLM-L6-v2", "name": "Hafif (Light)", "desc": "🚀 Hızlı"},
+    "2": {"id": "paraphrase-multilingual-MiniLM-L12-v2", "name": "Dengeli (Medium)", "desc": "⚖️ Türkçe"},
+    "3": {"id": "all-mpnet-base-v2", "name": "Güçlü (Heavy)", "desc": "🧠 Detaylı"}
+}
+
+MODEL_OPTIONS = {
+    "1": {"id": "gemini", "name": "Google Gemini", "desc": "⚡ Dengeli ve Ücretsiz"},
+    "2": {"id": "groq", "name": "Groq (Llama 3)", "desc": "🚀 Işık Hızında"},
+    "3": {"id": "deepseek", "name": "DeepSeek Chat", "desc": "👨‍💻 Kodlama Uzmanı"},
+    "4": {"id": "huggingface", "name": "Hugging Face", "desc": "🤗 Açık Kaynak Modeller"}
+}
 
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
-def ensure_workspace():
-    """Çalışma alanı klasörünü oluşturur."""
-    if not PROJECTS_ROOT.exists():
-        os.makedirs(PROJECTS_ROOT)
+def update_config_file(variable_name, new_value):
+    try:
+        with open("config.py", "r", encoding="utf-8") as f: lines = f.readlines()
+        with open("config.py", "w", encoding="utf-8") as f:
+            found = False
+            for line in lines:
+                if line.strip().startswith(variable_name):
+                    f.write(f'{variable_name} = "{new_value}"\n'); found = True
+                else: f.write(line)
+            if not found: f.write(f'\n{variable_name} = "{new_value}"\n')
+        return True
+    except: return False
 
-def slugify(text):
-    text = text.lower()
-    text = text.replace('ı', 'i').replace('ğ', 'g').replace('ü', 'u').replace('ş', 's').replace('ö', 'o').replace('ç', 'c')
-    text = re.sub(r'[^a-z0-9]', '-', text)
-    text = re.sub(r'-+', '-', text)
-    return text.strip('-')
-
-def get_projects():
+def load_projects():
     projects = []
-    ensure_workspace()
-    for entry in PROJECTS_ROOT.iterdir():
-        if entry.is_dir() and (entry / ".coder_memory").exists():
-            projects.append(entry)
-    return projects
-
-def get_project_stats(project_path: Path):
-    stats_file = project_path / ".project_stats.json"
-    total_cost = 0.0
-    last_updated = "-"
-    if stats_file.exists():
-        try:
-            with open(stats_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                total_cost = data.get("total_cost", 0.0)
-                last_updated = data.get("last_updated", "-")
+    if not os.path.exists(config.PROJECTS_DIR):
+        try: os.makedirs(config.PROJECTS_DIR)
         except: pass
-    return total_cost, last_updated
+    try: items = os.listdir(config.PROJECTS_DIR)
+    except: items = []
+    for item in items:
+        path = os.path.join(config.PROJECTS_DIR, item)
+        if os.path.isdir(path):
+            meta_path = os.path.join(path, "metadata.json")
+            embedding_model = "BİLİNMİYOR"
+            cost = 0.0
+            last_date = "0"
+            if os.path.exists(meta_path):
+                try:
+                    with open(meta_path, 'r') as f:
+                        data = json.load(f)
+                        embedding_model = data.get("embedding_model", "Eski")
+                        cost = data.get("total_cost", 0.0)
+                        last_date = data.get("last_interaction", "0")
+                except: pass
+            projects.append({"name": item, "embedding_model": embedding_model, "cost": cost, "last_date": last_date})
+    return sorted(projects, key=lambda x: x['last_date'], reverse=True)
 
-def export_project(project_path: Path):
-    """Projeyi taşınabilir ZIP formatına getirir."""
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M')
-    zip_name = f"{project_path.name}_BACKUP_{timestamp}"
-    zip_path = PROJECTS_ROOT / zip_name
-    
-    print(f"\n{CYAN}📦 Proje paketleniyor: {project_path.name}...{RESET}")
+def create_new_project():
+    print(f"\n{config.Colors.CYAN}✨ Yeni Proje{config.Colors.RESET}")
+    name = input("Proje İsmi: ").strip()
+    if not name: return
+    path = os.path.join(config.PROJECTS_DIR, name)
+    if os.path.exists(path): print("Zaten var!"); time.sleep(1); return
     try:
-        shutil.make_archive(str(zip_path), 'zip', project_path)
-        print(f"{GREEN}✅ Yedek Oluşturuldu: {zip_path}.zip{RESET}")
-        print(f"{GREY}   (Bu dosyayı USB'ye atıp başka bilgisayara taşıyabilirsiniz){RESET}")
-        input(f"\nDevam etmek için Enter...")
-    except Exception as e:
-        print(f"{RED}Paketleme hatası: {e}{RESET}")
-        input()
+        os.makedirs(path)
+        metadata = {
+            "created_at": str(datetime.datetime.now()),
+            "embedding_model": config.EMBEDDING_MODEL,
+            "total_cost": 0.0,
+            "last_interaction": str(datetime.datetime.now())
+        }
+        with open(os.path.join(path, "metadata.json"), 'w') as f: json.dump(metadata, f, indent=4)
+        start_project(name, config.EMBEDDING_MODEL)
+    except Exception as e: print(f"Hata: {e}"); input("Enter...")
 
-def create_new_project_wizard():
-    print(f"\n{CYAN}✨ YENİ PROJE OLUŞTUR{RESET}")
-    while True:
-        p_name = input(f"{YELLOW}1. Proje Adı: {RESET}").strip()
-        if p_name: break
-    
-    print(f"{CYAN}2. Açıklama{RESET}")
-    p_desc = input(f"{YELLOW}   Detay: {RESET}").strip()
-    if not p_desc: p_desc = f"{p_name} projesi."
+def start_project(name, project_embed_model):
+    if project_embed_model != config.EMBEDDING_MODEL:
+        print(f"\n{config.Colors.RED}⛔ UYUMSUZLUK: Proje '{project_embed_model}' hafızasıyla oluşturulmuş.{config.Colors.RESET}")
+        print(f"Sizin ayarınız: '{config.EMBEDDING_MODEL}'. Lütfen ayarlardan değiştirin."); input("Enter..."); return
 
-    suggested_folder = slugify(p_name)
-    p_folder = input(f"{YELLOW}3. Klasör Adı [{suggested_folder}]: {RESET}").strip()
-    if not p_folder: p_folder = suggested_folder
-        
-    # ARTIK ANA DİZİNE DEĞİL, MY_PROJECTS ALTINA KURUYORUZ
-    target_path = PROJECTS_ROOT / p_folder
-    
-    if target_path.exists():
-        print(f"\n{RED}❌ Hata: Bu isimde bir proje zaten var!{RESET}")
-        return None
-
+    print(f"\n{config.Colors.GREEN}🚀 Başlatılıyor ({config.ACTIVE_MODEL.upper()})...{config.Colors.RESET}")
     try:
-        os.makedirs(target_path)
-        print(f"{CYAN}🧠 Hafıza kuruluyor...{RESET}")
-        memory = MemoryManager(project_root=str(target_path))
-        
-        readme_content = f"# {p_name}\n\n## Proje Hakkında\n{p_desc}\n\nBu proje Coder-Asistan ile oluşturuldu."
-        with open(target_path / "README.md", "w", encoding="utf-8") as f:
-            f.write(readme_content)
-            
-        memory.collection.upsert(
-            documents=[f"PROJE TANIMI: {p_desc}"],
-            embeddings=memory.embedder.encode([p_desc]).tolist(),
-            metadatas=[{"source": "project_init"}],
-            ids=["project_description"]
-        )
-        print(f"{GREEN}✅ Proje Hazır!{RESET}")
-        return target_path
+        import assistant
+        importlib.reload(assistant)
+        assistant.main(name) 
     except Exception as e:
-        print(f"{RED}Hata: {e}{RESET}")
-        return None
+        print(f"\nERROR: {e}"); input("Enter...")
 
-def print_chat_history(project_path: Path):
-    log_file = project_path / ".chat_history.log"
-    if log_file.exists():
-        print(f"\n{GREY}📜 GEÇMİŞ KAYITLAR{RESET}")
-        try:
-            with open(log_file, 'r', encoding='utf-8') as f:
-                content = f.read()
-                content = content.replace("👤 USER:", f"{YELLOW}👤 USER:{RESET}")
-                content = content.replace("🤖 AI:", f"{GREEN}🤖 AI:{RESET}")
-                content = content.replace("💰 MALİYET:", f"{MAGENTA}💰 MALİYET:{RESET}")
-                print(content)
-        except: pass
-    else:
-        print(f"\n{GREY}(Henüz geçmiş yok){RESET}")
-
-def launch_assistant(project_path):
-    clear_screen()
-    total_cost, last_upd = get_project_stats(project_path)
-    
-    print(f"{GREEN}📂 PROJE: {project_path.name}{RESET}")
-    print(f"{MAGENTA}💰 TOPLAM: ${total_cost:.5f}{RESET} {GREY}(Son: {last_upd}){RESET}")
-    
-    readme = project_path / "README.md"
-    if readme.exists():
-         with open(readme, 'r', encoding='utf-8') as f:
-             print(f"{CYAN}ℹ️  {f.readline().strip().replace('# ', '')}{RESET}")
-
-    print_chat_history(project_path)
-    print(f"{CYAN}----------------------------------------{RESET}")
-    print(f"{GREY}(Sohbet geçmişi yukarıda kalacaktır. Çıkış için 'b' yazın){RESET}\n")
-
-    while True:
-        task = input(f"{YELLOW}User (Siz) > {RESET}").strip()
-        if task.lower() == 'b': return
-        if not task: continue
-            
-        # Assistant scripti bir üst dizinde (ana kök dizinde)
-        assistant_script = Path(__file__).parent / "assistant.py"
-        cmd = [sys.executable, str(assistant_script), task]
-        
-        print(f"{CYAN}----------------------------------------{RESET}")
-        try:
-            subprocess.run(cmd, cwd=str(project_path))
-            print(f"{CYAN}----------------------------------------{RESET}")
-        except Exception as e:
-            print(f"{RED}Hata: {e}{RESET}")
-
-def main():
-    ensure_workspace()
-    
+def settings_menu():
     while True:
         clear_screen()
-        projects = get_projects()
+        print(f"{config.Colors.YELLOW}=== AYARLAR ==={config.Colors.RESET}")
+        print(f"1. Yapay Zeka Modeli : {config.Colors.GREEN}{config.ACTIVE_MODEL.upper()}{config.Colors.RESET}")
+        print(f"2. Hafıza (RAG) Tipi : {config.Colors.CYAN}{config.EMBEDDING_MODEL}{config.Colors.RESET}")
+        print("-" * 50)
+        print("[M] Model Değiştir")
+        print("[H] Hafıza Değiştir")
+        print("[X] Geri Dön")
         
-        if not projects:
-            create_new_project_wizard()
-            continue
+        sel = input("\nSeçim: ").strip().upper()
+        
+        if sel == 'X': break
+        
+        elif sel == 'M':
+            print(f"\n{config.Colors.BLUE}--- MODEL SEÇİMİ ---{config.Colors.RESET}")
+            for k, v in MODEL_OPTIONS.items():
+                mark = " (AKTİF)" if v['id'] == config.ACTIVE_MODEL else ""
+                print(f"[{k}] {v['name']}{mark} - {v['desc']}")
+            m_sel = input("Seçim: ").strip()
+            if m_sel in MODEL_OPTIONS:
+                new_val = MODEL_OPTIONS[m_sel]['id']
+                update_config_file("ACTIVE_MODEL", new_val)
+                print("♻️  Kaydedildi, yeniden başlatılıyor..."); time.sleep(1)
+                os.execv(sys.executable, ['python'] + sys.argv)
 
-        print(f"{GREEN}╔══════════════════════════════════════════╗")
-        print(f"║   🚀 CODER-ASISTAN (Projeler: {len(projects)})      ║")
-        print(f"╚══════════════════════════════════════════╝{RESET}")
+        elif sel == 'H':
+            print(f"\n{config.Colors.BLUE}--- HAFIZA SEÇİMİ ---{config.Colors.RESET}")
+            for k, v in MEMORY_OPTIONS.items():
+                mark = " (AKTİF)" if v['id'] == config.EMBEDDING_MODEL else ""
+                print(f"[{k}] {v['name']}{mark} - {v['desc']}")
+            h_sel = input("Seçim: ").strip()
+            if h_sel in MEMORY_OPTIONS:
+                new_val = MEMORY_OPTIONS[h_sel]['id']
+                update_config_file("EMBEDDING_MODEL", new_val)
+                print("♻️  Kaydedildi, yeniden başlatılıyor..."); time.sleep(1)
+                os.execv(sys.executable, ['python'] + sys.argv)
+
+def main():
+    while True:
+        clear_screen()
+        importlib.reload(config)
+        projects = load_projects()
         
-        for idx, proj in enumerate(projects, 1):
-            cost, _ = get_project_stats(proj)
-            print(f"[{idx}] {proj.name:<20} {MAGENTA}${cost:.4f}{RESET}")
+        print(f"{config.Colors.BOLD}{config.Colors.BLUE}=== AI ASİSTAN (v2.4) ==={config.Colors.RESET}")
+        print(f"🤖 Model : {config.Colors.GREEN}{config.ACTIVE_MODEL.upper()}{config.Colors.RESET}")
+        print(f"🧠 Hafıza: {config.Colors.YELLOW}{config.EMBEDDING_MODEL}{config.Colors.RESET}")
+        print("-" * 60)
+        
+        for idx, p in enumerate(projects, 1):
+            status = "✅" if p['embedding_model'] == config.EMBEDDING_MODEL else "⛔"
+            print(f"[{idx}] {p['name']:<15} {status} ({p['embedding_model']})")
             
-        print(f"\n[{GREEN}N{RESET}] ✨ Yeni Proje")
-        print(f"[{CYAN}E{RESET}] 📦 Projeyi Paketle (Zip/Yedek)")
-        print(f"[{RED}Q{RESET}] 🚪 Çıkış")
+        print("-" * 60)
+        print("[N] Yeni Proje  |  [S] Ayarlar  |  [Q] Çıkış")
+        ch = input("> ").strip().upper()
         
-        choice = input(f"\n{YELLOW}Seçim: {RESET}").strip().upper()
-        
-        if choice == 'Q': sys.exit()
-        elif choice == 'N':
-            new_proj = create_new_project_wizard()
-            if new_proj: launch_assistant(new_proj)
-        elif choice == 'E':
-            try:
-                p_idx = int(input("Paketlenecek proje numarası: "))
-                if 1 <= p_idx <= len(projects):
-                    export_project(projects[p_idx-1])
-            except ValueError: pass
-        elif choice.isdigit():
-            idx = int(choice)
-            if 1 <= idx <= len(projects):
-                launch_assistant(projects[idx-1])
+        if ch == 'Q': sys.exit()
+        elif ch == 'N': create_new_project()
+        elif ch == 'S': settings_menu()
+        elif ch.isdigit():
+            idx = int(ch) - 1
+            if 0 <= idx < len(projects): start_project(projects[idx]['name'], projects[idx]['embedding_model'])
 
 if __name__ == "__main__":
     main()

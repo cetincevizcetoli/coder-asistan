@@ -4,79 +4,46 @@ import re
 import json
 import shutil
 import time
-import requests
 from datetime import datetime
 from typing import List, Optional, Any, Tuple, Dict
 
-# --- PROJE MODÜLLERİ ---
-import config
-from config import Colors, PRICING_RATES
-from core.memory import MemoryManager
-
-# --- DİNAMİK MODEL İMPORTLARI ---
-try: from core.gemini import GeminiModel
-except ImportError: pass
-try: from core.groq import GroqModel; GROQ_AVAILABLE = True
-except ImportError: GROQ_AVAILABLE = False
-try: from core.deepseek import DeepSeekModel; DEEPSEEK_AVAILABLE = True
-except ImportError: DEEPSEEK_AVAILABLE = False
-try: from core.huggingface import HuggingFaceModel; HF_AVAILABLE = True
-except ImportError: HF_AVAILABLE = False
+try:
+    import config
+    from config import Colors, PRICING_RATES
+    from core.memory import MemoryManager
+except ImportError:
+    import config
 
 # --- SABİTLER ---
-FILE_PATTERN = re.compile(r"[\w-]+\.(py|js|html|css|md|json|txt|java|cpp|h|ts|jsx|tsx|sh|env)", re.IGNORECASE)
+FILE_PATTERN = re.compile(r"[\w-]+\.(py|js|html|css|md|json|txt|java|cpp|h|ts|jsx|tsx|sh|env|sql|xml|yaml)", re.IGNORECASE)
 
 # ==========================================
 # 🛠️ YARDIMCI FONKSİYONLAR
 # ==========================================
 
 def is_safe_path(file_path: str, current_directory: str) -> bool:
-    if os.path.isabs(file_path): return False
-    normalized_path = os.path.normpath(file_path)
-    if normalized_path.startswith('..'): return False
-    full_path = os.path.join(current_directory, file_path)
-    return os.path.realpath(full_path).startswith(current_directory)
+    try:
+        if os.path.isabs(file_path): return False
+        if '..' in file_path: return False
+        target_path = os.path.abspath(os.path.join(current_directory, file_path))
+        safe_root = os.path.abspath(current_directory)
+        return target_path.startswith(safe_root)
+    except: return False
 
 def clean_json_string(json_string: str) -> Optional[Dict]:
-    """
-    AI'dan gelen yanıtı temizler ve parse eder.
-    GELİŞTİRİLMİŞ VERSİYON: Hata olursa programı çökertmek yerine None döner.
-    """
     try:
-        # Markdown kod bloklarını temizle (```json ... ```)
         if "```" in json_string:
             lines = json_string.split('\n')
             clean_lines = []
             capture = False
             for line in lines:
-                if "```" in line:
-                    capture = not capture # Blok başladı/bitti
-                    continue
-                if capture:
-                    clean_lines.append(line)
-            
-            # Eğer kod bloğu bulduysak onu kullan, bulamadıysak (sadece ``` varsa) ham metni temizle
-            if clean_lines:
-                json_string = "\n".join(clean_lines)
-            else:
-                json_string = json_string.replace("```json", "").replace("```", "")
-
-        # Temizlik sonrası kalan boşlukları al
+                if "```" in line: capture = not capture; continue
+                if capture: clean_lines.append(line)
+            json_string = "\n".join(clean_lines) if clean_lines else json_string.replace("```json", "").replace("```", "")
         json_string = json_string.strip()
-        
-        # Olası fazlalıkları temizle (Bazen AI en sona açıklama ekler)
-        if json_string.rfind('}') != -1:
-            json_string = json_string[:json_string.rfind('}')+1]
-
-        # JSON Parse Denemesi
+        if json_string.rfind('}') != -1: json_string = json_string[:json_string.rfind('}')+1]
         return json.loads(json_string)
-
-    except json.JSONDecodeError:
-        print(f"\n{Colors.RED}❌ AI Yanıtı JSON Formatına Uymuyor!{Colors.RESET}")
-        return None
-    except Exception as e:
-        print(f"{Colors.RED}❌ Beklenmeyen JSON Hatası: {e}{Colors.RESET}")
-        return None
+    except: return None
 
 def backup_file(full_path: str) -> Optional[str]:
     if not os.path.exists(full_path): return None
@@ -86,239 +53,154 @@ def backup_file(full_path: str) -> Optional[str]:
     shutil.copy(full_path, os.path.join(config.BACKUP_DIR, backup_name))
     return backup_name
 
-def extract_wait_time(error_message: str) -> int:
-    match = re.search(r"retry in (\d+(\.\d+)?)s", str(error_message))
-    if match: return int(float(match.group(1))) + 2 
-    return 30 
-
 def log_conversation(working_dir: str, user_prompt: str, ai_explanation: str, model_name: str, cost: float = 0.0):
-    """Sohbeti ve MALİYETİ detaylı şekilde log dosyasına kaydeder."""
     log_file = os.path.join(working_dir, ".chat_history.log")
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M')
-    
-    log_entry = (
-        f"════════════════════════════════════════════════════════════\n"
-        f"📅 ZAMAN: {timestamp} | 🤖 MODEL: {model_name}\n"
-        f"💰 MALİYET: ${cost:.5f}\n"
-        f"👤 USER: {user_prompt}\n"
-        f"🤖 AI:   {ai_explanation}\n"
-    )
     try:
         with open(log_file, "a", encoding="utf-8") as f:
-            f.write(log_entry)
-    except Exception as e:
-        print(f"{Colors.RED}Log Yazma Hatası: {e}{Colors.RESET}")
+            f.write(f"📅 {timestamp} | 🤖 {model_name} | 💰 ${cost:.5f}\n👤 {user_prompt}\n🤖 {ai_explanation}\n{'='*40}\n")
+    except: pass
 
-def update_project_stats(working_dir: str, usage_data: dict, model_key: str) -> Tuple[float, float]:
-    """Toplam proje maliyetini hesaplar, kaydeder ve döner."""
+def update_project_stats(working_dir: str, usage_data: dict, model_key: str):
     stats_file = os.path.join(working_dir, ".project_stats.json")
-    
-    stats = {
-        "total_cost": 0.0,
-        "total_input_tokens": 0,
-        "total_output_tokens": 0,
-        "last_updated": ""
-    }
-
+    stats = {"total_cost": 0.0, "total_input_tokens": 0, "total_output_tokens": 0}
     if os.path.exists(stats_file):
         try:
-            with open(stats_file, 'r', encoding='utf-8') as f:
-                stats = json.load(f)
+            with open(stats_file, 'r') as f: stats = json.load(f)
         except: pass
 
     in_tokens = usage_data.get("input_tokens", 0)
     out_tokens = usage_data.get("output_tokens", 0)
     rates = PRICING_RATES.get(model_key, {"input": 0, "output": 0})
-    
     current_cost = ((in_tokens / 1_000_000) * rates["input"]) + ((out_tokens / 1_000_000) * rates["output"])
 
     stats["total_cost"] += current_cost
     stats["total_input_tokens"] += in_tokens
     stats["total_output_tokens"] += out_tokens
-    stats["last_updated"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
+    
     try:
-        with open(stats_file, 'w', encoding='utf-8') as f:
-            json.dump(stats, f, indent=4)
-    except Exception as e:
-        print(f"{Colors.RED}İstatistik kayıt hatası: {e}{Colors.RESET}")
-
+        with open(stats_file, 'w') as f: json.dump(stats, f, indent=4)
+    except: pass
     return current_cost, stats["total_cost"]
 
 def print_cost_report(current_cost: float, total_cost: float, usage_data: dict):
-    in_tokens = usage_data.get("input_tokens", 0)
-    out_tokens = usage_data.get("output_tokens", 0)
+    in_t, out_t = usage_data.get("input_tokens", 0), usage_data.get("output_tokens", 0)
+    c_str = f"${current_cost:.5f}" if config.USER_TIER != 'free' else "$0.00"
+    t_str = f"${total_cost:.5f}" if config.USER_TIER != 'free' else "$0.00"
+    print(f"\n{Colors.GREY}📊 Girdi: {in_t} | Çıktı: {out_t} | Maliyet: {Colors.GREEN}{c_str}{Colors.RESET}")
+    print(f"{Colors.GREY}   💰 TOPLAM: {t_str}{Colors.RESET}")
 
-    tier_label = "ÜCRETSİZ KATMAN" if config.USER_TIER == 'free' else "ÜCRETLİ API"
-    
-    if config.USER_TIER == 'free':
-        c_cost_str = "$0.00000"
-        t_cost_str = "$0.00000"
-    else:
-        c_cost_str = f"${current_cost:.5f}"
-        t_cost_str = f"${total_cost:.5f}"
-
-    print(f"\n{Colors.GREY}📊 FİNANSAL RAPOR ({tier_label}){Colors.RESET}")
-    print(f"{Colors.GREY}   ├── Bu İşlem:  Girdi: {in_tokens:<5} | Çıktı: {out_tokens:<5} | Maliyet: {Colors.GREEN}{c_cost_str}{Colors.RESET}")
-    print(f"{Colors.GREY}   └── 💰 TOPLAM: {Colors.CYAN}Proje Geneli Harcama: {t_cost_str}{Colors.RESET}")
-
-# ==========================================
-# 🚀 ANA İŞLEM DÖNGÜSÜ
-# ==========================================
-
-def main_process(prompt_text: str, model_instance: Any, working_dir: str, is_dry_run: bool = False):
-    
-    try: memory = MemoryManager(project_root=working_dir)
-    except: memory = None
-
-    if memory:
-        all_files = []
-        for root, dirs, files in os.walk(working_dir):
-            dirs[:] = [d for d in dirs if not d.startswith('.')]
-            for file in files:
-                if FILE_PATTERN.match(file):
-                    rel_path = os.path.relpath(os.path.join(root, file), working_dir)
-                    all_files.append(rel_path)
-        if all_files: memory.index_files(all_files)
-
+def process_single_turn(prompt_text: str, model_instance: Any, working_dir: str, memory: Any, is_dry_run: bool = False):
     rag_context = ""
     if memory:
         print(f"{Colors.CYAN}🔍 Hafıza taranıyor...{Colors.RESET}")
         rag_context = memory.query(prompt_text, n_results=config.MAX_CONTEXT_RESULTS)
-        if len(rag_context) > config.MAX_CONTEXT_CHARS:
-            rag_context = rag_context[:config.MAX_CONTEXT_CHARS] + "\n...(Kırpıldı)..."
+        if len(rag_context) > config.MAX_CONTEXT_CHARS: rag_context = rag_context[:config.MAX_CONTEXT_CHARS]
 
-    full_prompt = (
-        f"--- PROJE BAĞLAMI ---\n{rag_context}\n\n"
-        f"--- KULLANICI İSTEĞİ ---\n{prompt_text}\n"
-    )
-        
-    print(f"{Colors.BLUE}✅ GÖREV:{Colors.RESET} {prompt_text}")
-    if is_dry_run: print(f"{Colors.YELLOW}🧪 (DRY-RUN AKTİF){Colors.RESET}")
-
-    ai_response_plan = {} 
+    full_prompt = f"--- BAĞLAM ---\n{rag_context}\n\n--- İSTEK ---\n{prompt_text}\n"
+    print(f"{Colors.BLUE}✅ İŞLENİYOR:{Colors.RESET} {prompt_text}")
     
-    # Maliyet değişkenleri
+    ai_response_plan = {}
     current_cost = 0.0
-    total_cost = 0.0
-
-    # 4. MODEL ÇALIŞTIRMA
-    while True:
-        masked_key = os.getenv("GOOGLE_API_KEY", "")[:5] + "..."
-        print(f"{Colors.CYAN}⏳ {model_instance.MODEL_NAME} düşünüyor... (Key: {masked_key}){Colors.RESET}")
-        
-        try:
-            response_data = model_instance.generate_content(
-                system_instruction=config.SYSTEM_INSTRUCTION,
-                prompt_text=full_prompt
-            )
-            
-            if isinstance(response_data, str):
-                raw_text = response_data; usage_info = {}; model_key_used = "unknown"
-            else:
-                raw_text = response_data["content"]; usage_info = response_data["usage"]; model_key_used = response_data["model_key"]
-
-            # --- GÜVENLİ PARSE İŞLEMİ (DÜZELTİLDİ) ---
-            # Artık clean_json_string direkt olarak dictionary veya None dönüyor
-            ai_response_plan = clean_json_string(raw_text)
-            
-            if ai_response_plan is None:
-                print(f"{Colors.RED}⚠️ AI geçersiz format üretti. Tekrar deneniyor...{Colors.RESET}")
-                # İsterseniz burada 'continue' diyerek AI'ya tekrar sordurabilirsiniz
-                # Ancak sonsuz döngüye girmemesi için şimdilik çıkış yapıyoruz veya kullanıcıya soruyoruz.
-                if input("Format bozuk. Tekrar denesin mi? (e/h): ").lower() == 'e':
-                    continue
-                else:
-                    return
-
-            # --- MALİYET HESAPLAMA ---
-            current_cost, total_cost = update_project_stats(working_dir, usage_info, model_key_used)
-            print_cost_report(current_cost, total_cost, usage_info)
-            break 
-
-        except requests.exceptions.ConnectionError:
-            print(f"\n{Colors.RED}📡 İNTERNET BAĞLANTISI YOK!{Colors.RESET}")
-            if input("Tekrar? (e/h): ").lower() != 'e': return
-        
-        except Exception as e:
-            err_str = str(e)
-            print(f"\n{Colors.RED}💣 HATA: {e}{Colors.RESET}")
-            if "429" in err_str:
-                wait_time = extract_wait_time(err_str)
-                print(f"{Colors.YELLOW}🚦 Kota doldu ({wait_time}s). [1] Bekle [2] Model Seç [3] İptal{Colors.RESET}")
-                c = input("Seçim: ")
-                if c == "1":
-                    time.sleep(wait_time); continue
-                elif c == "2":
-                    from model_selector import select_model_interactive
-                    m = select_model_interactive()
-                    if m: model_instance = m
-                    continue
-                else: return
-            else:
-                if input("Tekrar? (e/h): ").lower() != 'e': return
-
-    # --- PLANLAMA ---
-    explanation = ai_response_plan.get("aciklama", "Açıklama yok.")
-    files_to_create = ai_response_plan.get("dosya_olustur", {})
-    files_to_delete = ai_response_plan.get("dosya_sil", [])
-
-    print(f"\n{Colors.MAGENTA}🤖 AI DİYOR Kİ:{Colors.RESET}")
-    print(f"{Colors.CYAN}{explanation}{Colors.RESET}")
     
-    print("\n📋 PLANLANAN DEĞİŞİKLİKLER:")
-    for path in files_to_create.keys(): print(f"   📂 OLUŞTUR/GÜNCELLE: {path}")
-    for path in files_to_delete: print(f"   🗑️  SİLİNECEK: {path}")
+    while True:
+        try:
+            print(f"{Colors.CYAN}⏳ {model_instance.MODEL_NAME} çalışıyor...{Colors.RESET}")
+            resp = model_instance.generate_content(config.SYSTEM_INSTRUCTION, full_prompt)
+            
+            if isinstance(resp, str): raw = resp; usage = {}; key = "unknown"
+            else: raw = resp["content"]; usage = resp["usage"]; key = resp["model_key"]
 
-    if not files_to_create and not files_to_delete:
-        print(f"{Colors.YELLOW}   (İşlem yok){Colors.RESET}")
+            ai_response_plan = clean_json_string(raw)
+            if ai_response_plan is None: print("⚠️ Format hatası, tekrar deneniyor..."); continue
+
+            current_cost, total_cost = update_project_stats(working_dir, usage, key)
+            print_cost_report(current_cost, total_cost, usage)
+            break 
+        except Exception as e: print(f"\n{Colors.RED}Model Hatası: {e}{Colors.RESET}"); return
+
+    explanation = ai_response_plan.get("aciklama", "Açıklama yok.")
+    files_create = ai_response_plan.get("dosya_olustur", {})
+    files_delete = ai_response_plan.get("dosya_sil", [])
+
+    print(f"\n{Colors.MAGENTA}🤖 AI:{Colors.RESET} {Colors.CYAN}{explanation}{Colors.RESET}")
+    if not files_create and not files_delete: 
+        log_conversation(working_dir, prompt_text, explanation, model_instance.MODEL_NAME, current_cost); return
+
+    print("\n📋 PLAN:")
+    for p in files_create: print(f"   📂 + {p}")
+    for p in files_delete: print(f"   🗑️  - {p}")
+    if is_dry_run: return
+
+    confirm = input(f"\n{Colors.GREEN}Onay? (e/h): {Colors.RESET}").strip().lower()
+    if confirm == 'e':
+        for p in files_delete:
+            if is_safe_path(p, working_dir):
+                full = os.path.join(working_dir, p)
+                if os.path.exists(full): backup_file(full); os.remove(full); print(f"{Colors.RED}Silindi: {p}{Colors.RESET}")
+            else: print(f"🚨 Güvenlik Engeli: {p}")
+
+        for p, content in files_create.items():
+            if is_safe_path(p, working_dir):
+                full = os.path.join(working_dir, p)
+                try:
+                    os.makedirs(os.path.dirname(full), exist_ok=True)
+                    if os.path.exists(full): backup_file(full)
+                    with open(full, 'w', encoding='utf-8') as f: f.write(content)
+                    print(f"{Colors.GREEN}Yazıldı: {p}{Colors.RESET}")
+                    if memory: memory.index_files([p])
+                except Exception as e: print(f"Hata: {e}")
+            else: print(f"🚨 Güvenlik Engeli: {p}")
         log_conversation(working_dir, prompt_text, explanation, model_instance.MODEL_NAME, current_cost)
+    else: print("❌ İptal.")
+
+# ==========================================
+# 🌟 MAIN (DİNAMİK MODEL YÜKLEME)
+# ==========================================
+def main(project_name):
+    project_path = os.path.abspath(os.path.join(config.PROJECTS_DIR, project_name))
+    if not os.path.exists(project_path): print("Proje yok."); return
+
+    # --- DİNAMİK MODEL SEÇİMİ ---
+    active_model_key = getattr(config, 'ACTIVE_MODEL', 'gemini')
+    print(f"\n{Colors.GREEN}🚀 PROJE: {project_name.upper()} | MOTOR: {active_model_key.upper()}{Colors.RESET}")
+
+    model_instance = None
+    try:
+        if active_model_key == 'groq':
+            from core.groq import GroqModel
+            model_instance = GroqModel()
+        elif active_model_key == 'deepseek':
+            from core.deepseek import DeepSeekModel
+            model_instance = DeepSeekModel()
+        elif active_model_key == 'huggingface':
+            from core.huggingface import HuggingFaceModel
+            model_instance = HuggingFaceModel()
+        else:
+            # Varsayılan Gemini
+            from core.gemini import GeminiModel
+            model_instance = GeminiModel()
+            
+    except Exception as e:
+        print(f"{Colors.RED}Model Yüklenemedi ({active_model_key}): {e}{Colors.RESET}")
+        print("Config dosyasını veya API anahtarlarını kontrol edin.")
         return
 
-    if is_dry_run:
-        print(f"\n{Colors.YELLOW}🧪 DRY-RUN Bitti.{Colors.RESET}")
-        return
+    # Hafıza
+    memory = None
+    try: memory = MemoryManager(project_root=project_path)
+    except: pass
 
-    if input(f"\n{Colors.GREEN}Onaylıyor musunuz? (e/h): {Colors.RESET}").lower() != 'e':
-        print("❌ İptal edildi.")
-        return
-
-    # --- UYGULAMA ---
-    for rel_path in files_to_delete:
-        if not is_safe_path(rel_path, working_dir): continue
-        full_path = os.path.join(working_dir, rel_path)
-        if os.path.exists(full_path):
-            try:
-                backup_file(full_path)
-                os.remove(full_path)
-                print(f"{Colors.RED}   🗑️  Silindi: {rel_path}{Colors.RESET}")
-            except Exception as e:
-                print(f"{Colors.RED}   ❌ Silinemedi: {rel_path} ({e}){Colors.RESET}")
-
-    for rel_path, content in files_to_create.items():
-        if not is_safe_path(rel_path, working_dir):
-            print(f"{Colors.RED}🚨 Engellendi: {rel_path}{Colors.RESET}")
-            continue
-        full_path = os.path.join(working_dir, rel_path)
-        os.makedirs(os.path.dirname(full_path), exist_ok=True)
-        if os.path.exists(full_path): backup_file(full_path)
-        with open(full_path, 'w', encoding='utf-8') as f: f.write(content)
-        print(f"{Colors.GREEN}   ✅ Yazıldı: {rel_path}{Colors.RESET}")
-        if memory: memory.index_files([rel_path])
-
-    # Loglama (Maliyet parametresi eklendi)
-    log_conversation(working_dir, prompt_text, explanation, model_instance.MODEL_NAME, current_cost)
-
+    print(f"{Colors.CYAN}--------------------------------------------------{Colors.RESET}")
+    while True:
+        try:
+            user_input = input(f"\n{Colors.BOLD}{Colors.YELLOW}({project_name}) > {Colors.RESET}").strip()
+            if user_input.lower() in ['exit', 'q', 'b']: break
+            if not user_input: continue
+            process_single_turn(user_input, model_instance, project_path, memory)
+        except KeyboardInterrupt: break
+        except Exception as e: print(f"Hata: {e}")
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2: sys.exit(1)
-    
-    raw_args = sys.argv[1:]
-    is_dry_run = "--dry-run" in raw_args
-    cleaned_args = [a for a in raw_args if a != "--dry-run" and a != "--verbose"]
-    prompt = " ".join(cleaned_args)
-    cwd = os.getcwd()
-    
-    from model_selector import select_model_interactive
-    model = select_model_interactive()
-    if model: main_process(prompt, model, cwd, is_dry_run=is_dry_run)
+    print("Launcher kullanın.")
+
