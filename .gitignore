@@ -1,16 +1,5 @@
-# Sanal Ortamlar
-gemini_venv/
-venv/
-env/
-__pycache__/
-*.pyc
-
-# Proje Yedekleri ve Loglar
-.gassist_backups/
-.gassist_history.log
-
-# Sistem Dosyaları
-.DS_Store
-
-# Gizli Anahtarlar (Varsa)
-.env
+echo "my_projects/" >> .gitignore
+echo "__pycache__/" >> .gitignore
+echo ".env" >> .gitignore
+echo ".gassist_backups/" >> .gitignore
+echo ".venv/" >> .gitignore

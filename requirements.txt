@@ -1,8 +1,9 @@
 google-genai
 requests
-# --- RAG ve Hafıza ---
+openai
 chromadb>=0.4.0
 sentence-transformers>=2.2.0
 torch>=2.0.0
-# --- Yardımcılar ---
-tqdm  # İndeksleme sırasında progress bar için (opsiyonel ama iyi pratik)
+rank_bm25  # <--- Hibrit (Keyword) arama motoru için yeni eklendi
+termcolor
+tqdm

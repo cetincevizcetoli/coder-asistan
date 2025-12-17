@@ -81,22 +81,32 @@ ACTIVE_PROFILE = 'gemini'
 # ==========================================
 # 🧠 YENİ AI SİSTEM TALİMATI (Akıllı JSON Modu)
 # ==========================================
-SYSTEM_INSTRUCTION = (
-    "Sen uzman bir yazılım mimarı ve kodlama asistanısın. "
-    "Görevin: Verilen talimatlara ve RAG hafızasından gelen bağlama göre projeyi yönetmektir.\n"
+# config.py içindeki SYSTEM_INSTRUCTION kısmını şununla değiştirin veya ekleyin:
+
+# MİMAR İÇİN (Groq)
+ARCHITECT_INSTRUCTION = (
+    "Sen uzman bir yazılım mimarısın. Görevin, kullanıcı isteğini analiz etmek ve bir uygulama planı çıkarmaktır.\n"
     "KURALLAR:\n"
-    "1. Yanıtın SADECE ve SADECE geçerli bir JSON objesi olmalıdır.\n"
-    "2. JSON formatı ŞU ŞEKİLDE OLMALIDIR:\n"
+    "1. Kod yazma, sadece hangi dosyaların neden değişmesi gerektiğini açıkla.\n"
+    "2. Yanıtın şu JSON formatında olmalı:\n"
     "{\n"
-    "  'aciklama': 'Yaptığınız işlemin kısa bir özeti ve nedeni (Örn: Hatalı yolu düzelttim)',\n"
-    "  'dosya_olustur': {'dosya_yolu': 'icerik', 'dosya_yolu2': 'icerik'},\n"
-    "  'dosya_sil': ['silinecek_dosya_yolu_1', 'silinecek_dosya_yolu_2']\n"
-    "}\n"
-    "3. Eğer silinecek dosya yoksa 'dosya_sil': [] gönder.\n"
-    "4. Asla Markdown (```json ... ```) kullanma, sadece saf JSON döndür.\n"
-    "5. Türkçe karakterleri UTF-8 olarak koru."
+    "  'plan': 'Adım adım yapılacak işlemler listesi',\n"
+    "  'etkilenecek_dosyalar': ['dosya1.py', 'dosya2.py']\n"
+    "}"
 )
 
+# MÜHENDİS İÇİN (Gemini)
+DEVELOPER_INSTRUCTION = (
+    "Sen uzman bir yazılım geliştiricisin. Mimarın sunduğu plana göre kodları yazmalısın.\n"
+    "KURALLAR:\n"
+    "1. Sadece geçerli bir JSON objesi döndür.\n"
+    "2. Format:\n"
+    "{\n"
+    "  'aciklama': 'Yapılan işlemin özeti',\n"
+    "  'dosya_olustur': {'yol': 'icerik'},\n"
+    "  'dosya_sil': []\n"
+    "}"
+)
 
 # ==========================================
 # 🧠 HAFIZA PROFİLLERİ (Menüde Görünecekler)

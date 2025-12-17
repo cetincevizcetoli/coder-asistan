@@ -88,16 +88,21 @@ def create_new_project():
 
 def start_project(name, project_embed_model):
     if project_embed_model != config.EMBEDDING_MODEL:
-        print(f"\n{config.Colors.RED}⛔ UYUMSUZLUK: Proje '{project_embed_model}' hafızasıyla oluşturulmuş.{config.Colors.RESET}")
-        print(f"Sizin ayarınız: '{config.EMBEDDING_MODEL}'. Lütfen ayarlardan değiştirin."); input("Enter..."); return
+        print(f"\n{config.Colors.RED}⛔ UYUMSUZLUK: Bu proje '{project_embed_model}' kullanıyor.{config.Colors.RESET}")
+        print("Ayarlardan hafıza modelini değiştirmeniz gerek."); input("Enter..."); return
 
-    print(f"\n{config.Colors.GREEN}🚀 Başlatılıyor ({config.ACTIVE_MODEL.upper()})...{config.Colors.RESET}")
+    print(f"\n{config.Colors.GREEN}🚀 Sistem Başlatılıyor...{config.Colors.RESET}")
     try:
+        # Kodun en başına import assistant eklemek yerine burada dene
         import assistant
         importlib.reload(assistant)
         assistant.main(name) 
     except Exception as e:
-        print(f"\nERROR: {e}"); input("Enter...")
+        # Hata olduğunda ekranın temizlenmesini engellemek için:
+        print(f"\n{config.Colors.RED}❌ KRİTİK HATA OLUŞTU:{config.Colors.RESET}")
+        import traceback
+        traceback.print_exc() # Hatanın tam yerini ve nedenini yazar
+        input(f"\n{config.Colors.YELLOW}Devam etmek için Enter'a basın (Hata kaybolmadan okuyun)...{config.Colors.RESET}")
 
 def settings_menu():
     while True:
