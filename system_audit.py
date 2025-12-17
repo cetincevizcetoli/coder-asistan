@@ -3,11 +3,19 @@ import sys
 import sqlite3
 from pathlib import Path
 
+# Config dosyasından proje klasörünü öğrenelim
+try:
+    import config
+    PROJECTS_DIR_NAME = config.PROJECTS_DIR
+except ImportError:
+    PROJECTS_DIR_NAME = "my_projects"
+
 # Renkler
 GREEN = '\033[92m'
 RED = '\033[91m'
 YELLOW = '\033[93m'
 RESET = '\033[0m'
+CYAN = '\033[96m'
 
 def check_file_exists(path, description):
     if os.path.exists(path):
@@ -41,7 +49,7 @@ def audit_vector_db(project_path):
     print(f"\n--- 🧠 VEKTÖR VERİTABANI KONTROLÜ ---")
     
     if not os.path.exists(db_path):
-        print(f"{RED}❌ .coder_memory klasörü yok.{RESET}")
+        print(f"{RED}❌ .coder_memory klasörü yok (Hafızasız Proje).{RESET}")
         return
 
     if check_file_exists(sqlite_file, "ChromaDB SQLite Dosyası"):
@@ -55,14 +63,14 @@ def audit_vector_db(project_path):
             tables = cursor.fetchone()[0]
             print(f"   📊 Tablo Sayısı: {tables}")
             
-            # Embedding sayısını bulmaya çalış (Chroma versiyonuna göre tablo adı değişebilir)
-            # Genelde 'embeddings' tablosudur.
+            # Embedding sayısını bulmaya çalış
             try:
+                # Chroma versiyonuna göre tablo adı değişebilir, genelde 'embeddings'
                 cursor.execute("SELECT count(*) FROM embeddings;")
                 count = cursor.fetchone()[0]
                 print(f"   🧬 İndekslenmiş Vektör Sayısı: {GREEN}{count}{RESET}")
             except:
-                print(f"{YELLOW}   ⚠️ 'embeddings' tablosu direkt okunamadı (Chroma yapısı farklı olabilir).{RESET}")
+                print(f"{YELLOW}   ⚠️ 'embeddings' tablosu direkt okunamadı (Versiyon farkı olabilir).{RESET}")
                 
             conn.close()
             print(f"{GREEN}   ✅ Veritabanı bütünlüğü (Integrity) sağlam.{RESET}")
@@ -71,16 +79,24 @@ def audit_vector_db(project_path):
             print(f"{RED}   ❌ Veritabanı bozuk veya okunamıyor: {e}{RESET}")
 
 def main():
-    workspace = Path.cwd()
+    # DÜZELTME: Artık kök dizine değil, my_projects içine bakıyoruz
+    workspace = Path.cwd() / PROJECTS_DIR_NAME
     
-    # Projeleri bul
+    if not workspace.exists():
+        print(f"{RED}Hata: '{PROJECTS_DIR_NAME}' klasörü bulunamadı.{RESET}")
+        return
+
+    # Projeleri bul (içinde .coder_memory olan klasörler)
     projects = [d for d in workspace.iterdir() if d.is_dir() and (d / ".coder_memory").exists()]
+    
+    print(f"{CYAN}🔍 SİSTEM DENETÇİSİ BAŞLATILDI{RESET}")
+    print(f"📂 Hedef Dizin: {workspace}")
     
     if not projects:
         print(f"{RED}Test edilecek proje bulunamadı.{RESET}")
         return
 
-    print(f"🔍 {len(projects)} adet proje bulundu.")
+    print(f"✅ {len(projects)} adet proje tespit edildi.")
     
     for proj in projects:
         print(f"\n{YELLOW}========================================{RESET}")

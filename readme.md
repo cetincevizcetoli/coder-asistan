@@ -1,5 +1,5 @@
 # 🚀 Coder-Asistan
-### Hafızalı, Güvenli ve Proje Odaklı AI Kodlama Stüdyosu (Terminal Tabanlı)
+### Hafızalı, Güvenli ve Proje Odaklı AI Kodlama Stüdyosu
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -7,62 +7,23 @@
 
 **Coder-Asistan**, klasik "soru sor – cevap al" botlarından farklı olarak, projelerinizi yöneten, bağlamı hatırlayan ve kodu **kontrollü şekilde** değiştiren **terminal tabanlı bir AI geliştirme ortamıdır.**
 
-Her proje için ayrı bir hafıza oluşturur. Bir projede öğrendiğini diğerine taşımaz. Ne yaptığını önce planlar, sonra siz onaylarsanız uygular.
+Her proje için ayrı bir hafıza oluşturur (RAG). Bir projede öğrendiğini diğerine taşımaz. Ne yaptığını önce planlar, sonra siz onaylarsanız uygular.
 
 > **Kısaca:** Bu bir bot değil, **AI destekli bir geliştirme çalışma alanı**.
 
 ---
 
-## 🎯 Kimler İçin?
+## 🎯 Temel Özellikler
 
-- Terminal ile çalışmayı seven geliştiriciler
-- Birden fazla projeyi aynı anda AI ile yönetenler
-- Kodunu AI’ya körü körüne emanet etmek istemeyenler
-- Harcadığı token ve maliyeti görmek isteyenler
-- "Proje bazlı hafıza" isteyenler
-
----
-
-## ❗ Bu Proje Ne Değildir?
-
-- ❌ ChatGPT veya web tabanlı bir sohbet aracı değildir.
-- ❌ Bir IDE eklentisi değildir.
-- ❌ Kodları siz fark etmeden sessizce değiştirmez.
-- ❌ Tek seferlik script yazan basit bir bot değildir.
+* **🏭 Proje Fabrikası (`launcher.py`):** Tüm projeleri tek merkezden yönetin.
+* **🧠 İzole Hafıza:** Her projenin kendi `.coder_memory` klasörü vardır. AI, projenizdeki dosyaları okur ve hatırlar.
+* **🛡️ Güvenli Mod:** Kodları doğrudan yazmaz; önce plan sunar, onaylarsanız işler.
+* **💰 Maliyet Takibi:** Token başına harcamayı kuruşu kuruşuna raporlar.
+* **🔌 Model Özgürlüğü:** Google Gemini, Llama 3 (Groq), DeepSeek veya Hugging Face.
 
 ---
 
-## ✨ Neden Farklı?
-
-### 🧠 Proje Bazlı İzole Hafıza (RAG)
-Her proje için ayrı bir `.coder_memory` oluşturur. AI yalnızca o projeye ait dosyaları okur ve hatırlar.
-
-### 🛡️ Güvenli Çalışma Modeli
-AI şu adımları izler:
-1. Önce **JSON formatında plan** üretir.
-2. Hangi dosyaların oluşturulacağını/silineceğini gösterir.
-3. Siz onaylarsanız işlemi uygular.
-
-### 💰 Maliyet Takibi
-- Proje bazlı toplam harcama takibi.
-- Token giriş/çıkış sayıları.
-- `.project_stats.json` ile şeffaf kayıt.
-
-### 🏭 Proje Fabrikası (Launcher)
-- Tek menüden tüm projeleri yönetme.
-- Yeni proje sihirbazı.
-- Proje zip/yedekleme.
-- Sohbet geçmişi ve maliyet özeti.
-
-### 🔌 Çoklu Model Desteği
-- Google Gemini (Önerilen)
-- Groq Llama 3
-- DeepSeek
-- Hugging Face
-
----
-
-## 📦 Kurulum (Adım Adım)
+## 📦 Kurulum (2 Dakikada Hazır)
 
 ### 1️⃣ Projeyi İndirin
 ```bash
@@ -83,107 +44,133 @@ venv\Scripts\activate
 python3 -m venv venv
 source venv/bin/activate
 ```
-*(Terminal başında `(venv)` yazısını görmelisiniz.)*
+*(Terminal satırının başında `(venv)` yazısını görmelisiniz.)*
 
-### 3️⃣ Gerekli Paketleri Kurun
+### 3️⃣ Paketleri Yükleyin
 ```bash
 pip install -r requirements.txt
 ```
 
 ---
 
-## 🔑 API Anahtarı (Motoru Çalıştırmak)
+## 🔑 API Anahtarı Ayarları
 
-Coder-Asistan bir AI modele ihtiyaç duyar. **Google Gemini (Ücretsiz ve Hızlı)** önerilir.
+Coder-Asistan bir beyne ihtiyaç duyar. **Google Gemini (Ücretsiz)** önerilir.
 
-### Anahtar Alma
-1. [Google AI Studio](https://aistudio.google.com/app/apikey) adresine gidin.
-2. Google hesabı ile giriş yapın.
-3. **"Create API Key"** diyerek anahtarı kopyalayın.
-
-### Ortam Değişkeni Olarak Tanımlama
+1. [Google AI Studio](https://aistudio.google.com/app/apikey) adresinden Key alın.
+2. Bilgisayarınıza kaydedin:
 
 **🪟 Windows (Kalıcı):**
 ```cmd
-setx GOOGLE_API_KEY "SIZIN_API_KEYINIZ"
+setx GOOGLE_API_KEY "API_KEY_BURAYA_YAPISTIR"
 ```
-> ⚠️ **Uyarı:** Bu komuttan sonra geçerli olması için açık olan tüm terminalleri ve VS Code’u kapatıp açmanız gerekir.
+*(Komuttan sonra terminali kapatıp yeniden açın!)*
 
 **🐧 Linux / macOS:**
 ```bash
-echo 'export GOOGLE_API_KEY="SIZIN_API_KEYINIZ"' >> ~/.bashrc
+echo 'export GOOGLE_API_KEY="API_KEY_BURAYA"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
 ---
 
-## ▶️ Kullanım
+## ▶️ Nasıl Kullanılır? (Ana Kumanda)
 
-Sanal ortam aktifken (`venv`) şu komutu çalıştırın:
+Tüm sistemi yönetmek için tek bir komut yeterlidir:
 
 ```bash
 python launcher.py
 ```
 
-**Örnek Ekran:**
-```text
-╔══════════════════════════════════════════╗
-║   🚀 CODER-ASISTAN (Projeler: 2)         ║
-╚══════════════════════════════════════════╝
-[1] odev-projesi       $0.0042
-[2] web-sitesi         $0.1205
-
-[N] ✨ Yeni Proje
-[E] 📦 Projeyi Paketle
-[Q] 🚪 Çıkış
-```
-
-* **N:** Yeni proje oluştur.
-* **Numara:** Projeye gir.
-* **İçeride AI’ya doğal dilde görev ver:**
-    * *"Bu projeyi analiz et"*
-    * *"main.py içindeki hatayı bul"*
-    * *"Basit bir REST API oluştur"*
+Karşınıza gelen menüden:
+* **[N]** ile yeni proje oluşturabilir,
+* **[1-9]** ile mevcut projelerinize girip AI ile çalışmaya başlayabilirsiniz.
+* **[E]** ile projelerinizi ZIP olarak yedekleyebilirsiniz.
 
 ---
 
-## 🏗️ Proje Yapısı
+## 🛠️ İsviçre Çakısı: Yardımcı Araçlar
+
+Bu projede sadece kod yazan bir asistan yok, işinizi kolaylaştıracak bir dizi **profesyonel araç** bulunur. İşte alet çantanız:
+
+### 1. 🕵️‍♂️ Hafıza Müfettişi (`debug.py`)
+AI'nın projeniz hakkında ne bildiğini merak mı ediyorsunuz? Vektör veritabanının içine girip kaydedilen kod parçalarını okumanızı sağlar.
+```bash
+python debug.py
+```
+* **Ne zaman kullanılır?** AI, kodunuzu hatırlamıyorsa veya yanlış cevap veriyorsa hafızayı kontrol etmek için.
+
+### 2. 🚚 Proje Nakliyecisi (`migrate_projects.py`)
+Eski sürümden kalma veya yanlışlıkla ana dizine kopyaladığınız projeleri bulur ve otomatik olarak yeni sisteme (`my_projects` klasörüne) taşır.
+```bash
+python migrate_projects.py
+```
+* **Ne zaman kullanılır?** Klasörde projeniz var ama Launcher listesinde görünmüyorsa.
+
+### 3. 🩺 Sistem Doktoru (`system_audit.py`)
+Projelerinizin sağlık kontrolünü yapar. Log dosyaları dolu mu? Veritabanı bütünlüğü (integrity) sağlam mı? Hepsini raporlar.
+```bash
+python system_audit.py
+```
+* **Ne zaman kullanılır?** Sistemsel bir hatadan şüpheleniyorsanız veya veritabanı bozulduysa.
+
+### 4. 📝 Proje Katibi (`generate_docs.py`)
+Tüm projenizin kodlarını okur ve tek bir Markdown dosyasında (`proje_dokumu.md`) birleştirir.
+```bash
+python generate_docs.py
+```
+* **Ne zaman kullanılır?** Projenin tamamını ChatGPT/Claude gibi başka bir AI'ya atıp "Bunu analiz et" demek istediğinizde.
+
+### 5. 📡 Model Kontrolcüsü (`check_models.py`)
+Google hesabınızda tanımlı ve erişilebilir olan Gemini modellerini listeler.
+```bash
+python check_models.py
+```
+* **Ne zaman kullanılır?** "Hangi modelleri kullanabilirim?" diye merak ettiğinizde.
+
+---
+
+## 🧪 Gelişmiş Parametreler
+
+Projeye girdikten sonra (veya `assistant.py`'yi manuel kullanırken) şu modları kullanabilirsiniz:
+
+* **`--dry-run` (Prova Modu):**
+  AI kodları yazar, planı gösterir ama **dosyaya kaydetmez.**
+  ```bash
+  python assistant.py "Ana sayfayı değiştir" --dry-run
+  ```
+
+* **`--verbose` (Geveze Mod):**
+  Arka planda dönen ham JSON verisini ve düşünce sürecini gösterir. Hata ayıklamak için idealdir.
+  ```bash
+  python assistant.py "Hata bul" --verbose
+  ```
+
+---
+
+## 🏗️ Proje Mimarisi
 
 ```text
 coder-asistan/
-├─ launcher.py          # 🎮 Ana kontrol merkezi (Başlatıcı)
-├─ assistant.py         # 🧠 AI işlem motoru
-├─ config.py            # ⚙️ Ayarlar
-├─ core/                # 🤖 Model entegrasyonları
-├─ my_projects/         # 📂 SİZİN PROJELERİNİZ BURADA
-│  └─ proje-adi/
-│     ├─ .coder_memory/
-│     ├─ src/
-│     └─ README.md
+├─ launcher.py          # 🎮 ANA KUMANDA (Başlatıcı)
+├─ assistant.py         # 🧠 İşlem Motoru
+├─ my_projects/         # 📂 PROJE FABRİKASI
+│  └─ odev-1/           # 🔒 İzole Proje Alanı
+│     ├─ .coder_memory/ # 🧠 Projeye özel hafıza
+│     └─ src/           # Kodlarınız
+├─ debug.py             # 🕵️‍♂️ Hafıza Müfettişi
+├─ system_audit.py      # 🩺 Sistem Doktoru
+├─ migrate_projects.py  # 🚚 Taşıyıcı
 └─ requirements.txt
 ```
 
 ---
 
-## 🧩 Desteklenen Modeller
+## 💡 İpuçları ve Püf Noktaları
 
-| Model | Hız | Maliyet | Not |
-| :--- | :--- | :--- | :--- |
-| **Gemini 2.5 Flash** | ⚡⚡⚡ | **Ücretsiz** | Başlangıç için ideal |
-| **Llama 3.3 (Groq)** | 🚀 | Ücretsiz | Çok hızlı |
-| **DeepSeek Chat** | 🧠 | Düşük | Karmaşık işler |
-| **HF Qwen** | 🛠️ | Ücretsiz | Alternatif |
-
----
-
-## ❓ Sık Karşılaşılan Hatalar
-
-* **`ModuleNotFoundError: google`**
-    * Sanal ortam aktif değil veya paketler kurulmamış (`pip install -r requirements.txt`).
-* **`GOOGLE_API_KEY tanımlı değil`**
-    * Anahtarı tanımladıktan sonra terminali kapatıp açmadınız.
-* **Hafıza (ChromaDB) hata veriyor**
-    * Sistem otomatik olarak hafızasız (no-memory) moda geçer ve çalışmaya devam eder. Endişelenmeyin.
+* **🗑️ Proje Silme:** Bir projeyi silmek için Launcher'da bir komut yoktur. `my_projects` klasörüne gidip ilgili proje klasörünü **elle silmeniz** yeterlidir.
+* **🧠 Hafıza Sıfırlama:** AI eski kodları hatırlamakta ısrar ediyorsa veya kafası karıştıysa; proje klasörünüzdeki `.coder_memory` klasörünü silin. Coder-Asistan bir sonraki açılışta dosyaları tarayıp hafızayı sıfırdan kuracaktır.
+* **⚙️ İnce Ayarlar:** Dosya boyutu sınırlarını veya maliyet hesaplama yöntemini değiştirmek isterseniz `config.py` dosyasını düzenleyebilirsiniz.
 
 ---
 
@@ -193,4 +180,4 @@ coder-asistan/
 * **GitHub:** [github.com/cetincevizcetoli](https://github.com/cetincevizcetoli)
 * **Web:** [yapanzeka.acetin.com.tr](https://yapanzeka.acetin.com.tr)
 
-> *"Karmaşık kodları, kontrollü şekilde yönetin."*
+> *"Karmaşık kodları, kontrollü araçlarla yönetin."*

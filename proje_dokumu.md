@@ -26,6 +26,7 @@ Not: `my_projects` klasörünün içeriği gizlilik gereği hariç tutulmuştur.
     - groq.py
     - huggingface.py
     - memory.py
+  - **my_projects/** (Kullanıcı Projeleri - İçerik Gizli)
 
 ---
 ### 💻 Kod İçeriği Dökümü
@@ -472,6 +473,13 @@ import sys
 import chromadb
 from pathlib import Path
 
+# Config'den proje klasör ismini çekelim
+try:
+    import config
+    PROJECTS_DIR_NAME = config.PROJECTS_DIR
+except ImportError:
+    PROJECTS_DIR_NAME = "my_projects"
+
 # Renkler
 CYAN = '\033[96m'
 GREEN = '\033[92m'
@@ -480,9 +488,16 @@ RED = '\033[91m'
 RESET = '\033[0m'
 
 def list_projects():
-    workspace = Path.cwd()
+    # DÜZELTME: Artık ana dizine değil, my_projects klasörüne bakıyoruz
+    workspace = Path.cwd() / PROJECTS_DIR_NAME
+    
+    if not workspace.exists():
+        print(f"{RED}Hata: {PROJECTS_DIR_NAME} klasörü bulunamadı.{RESET}")
+        return []
+
     projects = []
     for entry in workspace.iterdir():
+        # .coder_memory klasörü olanları proje say
         if entry.is_dir() and (entry / ".coder_memory").exists():
             projects.append(entry)
     return projects
@@ -493,9 +508,16 @@ def inspect_memory(project_path):
     print(f"\n{CYAN}🧠 Veritabanı Bağlanıyor: {memory_path}{RESET}")
     
     try:
+        # ChromaDB istemcisi
         client = chromadb.PersistentClient(path=str(memory_path))
-        # Koleksiyon adımız config.py'de 'project_codebase' idi
-        collection = client.get_collection("project_codebase")
+        
+        # Koleksiyonu bulmaya çalış
+        try:
+            # Config'deki ismi kullanıyoruz
+            collection = client.get_collection("project_codebase")
+        except:
+            print(f"{RED}⚠️ Koleksiyon bulunamadı. Veritabanı bozuk olabilir.{RESET}")
+            return
         
         count = collection.count()
         print(f"{GREEN}📊 Toplam Kayıtlı Parça (Chunk): {count}{RESET}")
@@ -504,21 +526,26 @@ def inspect_memory(project_path):
             print(f"{RED}⚠️ Hafıza boş! Henüz hiçbir dosya indekslenmemiş.{RESET}")
             return
 
-        print(f"\n{YELLOW}--- SON KAYDEDİLEN 5 VERİ ---{RESET}")
-        # İlk 5 veriyi çek (metadata ve id'leri getir)
+        print(f"\n{YELLOW}--- SON KAYDEDİLEN 5 VERİ (Örnek) ---{RESET}")
+        
+        # İlk 5 veriyi çek
         data = collection.peek(limit=5)
         
+        if not data['ids']:
+            print("Veri çekilemedi.")
+            return
+
         ids = data['ids']
         metadatas = data['metadatas']
         documents = data['documents']
         
         for i in range(len(ids)):
             doc_id = ids[i]
-            meta = metadatas[i]
-            content = documents[i]
+            meta = metadatas[i] if metadatas else "{}"
+            content = documents[i] if documents else ""
             
-            # İçerik çok uzunsa kısalt
-            preview = content[:100].replace('\n', ' ') + "..."
+            # İçerik çok uzunsa kısaltarak göster
+            preview = content[:150].replace('\n', ' ') + "..."
             
             print(f"[{i+1}] ID: {doc_id}")
             print(f"    Kaynak: {meta}")
@@ -526,23 +553,29 @@ def inspect_memory(project_path):
             
     except Exception as e:
         print(f"{RED}Hata: {e}{RESET}")
-        print("Veritabanı henüz oluşturulmamış veya bozuk olabilir.")
+        print("Veritabanı okunamadı. C++ Build Tools eksik olabilir veya DB kilitli.")
 
 if __name__ == "__main__":
     os.system('cls' if os.name == 'nt' else 'clear')
-    print("🕵️  RAG HAFIZA MÜFETTİŞİ")
-    print("-----------------------")
+    print(f"🕵️  RAG HAFIZA MÜFETTİŞİ (Hedef: {PROJECTS_DIR_NAME}/)")
+    print("------------------------------------------------")
     
     projects = list_projects()
     
     if not projects:
-        print("Hiç proje bulunamadı.")
+        print(f"{YELLOW}Hiç proje bulunamadı.{RESET}")
+        print(f"Not: Projelerinizin '{PROJECTS_DIR_NAME}' klasöründe olduğundan emin olun.")
         sys.exit()
         
     for idx, p in enumerate(projects, 1):
         print(f"[{idx}] {p.name}")
         
-    choice = input("\nHangi projeyi inceleyelim? (No): ")
+    print("\n[Q] Çıkış")
+    choice = input("\nHangi projeyi inceleyelim? (No): ").strip()
+    
+    if choice.lower() == 'q':
+        sys.exit()
+        
     if choice.isdigit() and 1 <= int(choice) <= len(projects):
         inspect_memory(projects[int(choice)-1])
     else:
@@ -1043,179 +1076,189 @@ def select_model_interactive():
 #### 📄 Dosya: `readme.md`
 
 ```md
-# 🚀 Coder-Asistan: AI Destekli Kodlama Stüdyosu
+# 🚀 Coder-Asistan
+### Hafızalı, Güvenli ve Proje Odaklı AI Kodlama Stüdyosu
 
-![Python](https://img.shields.io/badge/python-3.10%252B-blue)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Status](https://img.shields.io/badge/status-active-success)
 
-**Coder-Asistan**, sadece kod yazan bir bot değil; projelerinizi yöneten, hafızası olan ve bağlamı kaybetmeden çalışan **terminal tabanlı bir geliştirme ortamıdır.**
+**Coder-Asistan**, klasik "soru sor – cevap al" botlarından farklı olarak, projelerinizi yöneten, bağlamı hatırlayan ve kodu **kontrollü şekilde** değiştiren **terminal tabanlı bir AI geliştirme ortamıdır.**
 
-Eski nesil botların aksine, her projeniz için ayrı bir "beyin" (Vektör Veritabanı) oluşturur. Böylece "A projesi" hakkında konuşurken, "B projesi" ile kafası karışmaz.
+Her proje için ayrı bir hafıza oluşturur (RAG). Bir projede öğrendiğini diğerine taşımaz. Ne yaptığını önce planlar, sonra siz onaylarsanız uygular.
 
----
-
-## ✨ Neden Farklı? (Yeni Mimari)
-
-* **🏭 Proje Fabrikası (`launcher.py`):** Tüm projelerinizi tek bir menüden yönetin. Yeni proje açın, eskisine geçin veya yedekleyip zipleyin.
-* **🧠 İzole Hafıza (RAG):** Her projenin kendi `.coder_memory` klasörü vardır. AI, o projeye ait tüm dosyaları okur ve hatırlar.
-* **💰 Maliyet Takibi:** Hangi proje ne kadar harcadı? Token başına maliyet hesaplar ve raporlar.
-* **🛡️ Güvenlik:** Kodları doğrudan yazmaz; önce JSON formatında plan sunar, onaylarsanız işler.
-* **🔌 Çoklu Model Desteği:** Google Gemini (Önerilen), Llama 3 (Groq), DeepSeek veya Hugging Face. Özgürsünüz.
+> **Kısaca:** Bu bir bot değil, **AI destekli bir geliştirme çalışma alanı**.
 
 ---
 
-## 📦 Kurulum Rehberi (Adım Adım)
+## 🎯 Temel Özellikler
 
-Bu bölüm, teknik bilgisi az olan kullanıcılar için **en basit haliyle** hazırlanmıştır. Lütfen işletim sisteminize uygun adımları takip edin.
+* **🏭 Proje Fabrikası (`launcher.py`):** Tüm projeleri tek merkezden yönetin.
+* **🧠 İzole Hafıza:** Her projenin kendi `.coder_memory` klasörü vardır. AI, projenizdeki dosyaları okur ve hatırlar.
+* **🛡️ Güvenli Mod:** Kodları doğrudan yazmaz; önce plan sunar, onaylarsanız işler.
+* **💰 Maliyet Takibi:** Token başına harcamayı kuruşu kuruşuna raporlar.
+* **🔌 Model Özgürlüğü:** Google Gemini, Llama 3 (Groq), DeepSeek veya Hugging Face.
+
+---
+
+## 📦 Kurulum (2 Dakikada Hazır)
 
 ### 1️⃣ Projeyi İndirin
-
-Bilgisayarınızda projeyi kurmak istediğiniz klasöre gidin (Örn: Masaüstü) ve terminali açıp şu komutları yapıştırın:
-
 ```bash
 git clone [https://github.com/cetincevizcetoli/coder-asistan.git](https://github.com/cetincevizcetoli/coder-asistan.git)
 cd coder-asistan
 ```
 
-### 2️⃣ Sanal Ortam Oluşturun (ÖNEMLİ!)
+### 2️⃣ Sanal Ortam Oluşturun (ÖNEMLİ)
 
-Bilgisayarınızdaki diğer Python projeleriyle çakışma olmaması için, bu projeye özel izole bir alan oluşturmalıyız.
-
-**🪟 Windows Kullanıcıları:**
+**🪟 Windows:**
 ```cmd
 python -m venv venv
 venv\Scripts\activate
 ```
-*(Komutu girdikten sonra satırın en başında `(venv)` yazısını görmelisiniz. Görmüyorsanız işlem başarısızdır.)*
 
-**🐧 Linux / macOS Kullanıcıları:**
+**🐧 Linux / macOS:**
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 ```
+*(Terminal satırının başında `(venv)` yazısını görmelisiniz.)*
 
-### 3️⃣ Gerekli Kütüphaneleri Yükleyin
-
+### 3️⃣ Paketleri Yükleyin
 ```bash
 pip install -r requirements.txt
 ```
-*(Bu işlem internet hızınıza göre 1-2 dakika sürebilir. Kırmızı bir hata yazısı görmediyseniz işlem tamamdır.)*
 
 ---
 
-## 🔑 API Anahtarı (Motoru Çalıştırmak)
+## 🔑 API Anahtarı Ayarları
 
-Aracın çalışması için bir yapay zeka beynine ihtiyacı var. **Google Gemini (Ücretsiz ve Hızlı)** önerilir.
+Coder-Asistan bir beyne ihtiyaç duyar. **Google Gemini (Ücretsiz)** önerilir.
 
-### Adım A: Anahtarı Almak
-1.  [Google AI Studio](https://aistudio.google.com/app/apikey) adresine gidin.
-2.  Google hesabınızla giriş yapın.
-3.  **"Create API Key"** butonuna basın ve çıkan uzun şifreyi kopyalayın.
+1. [Google AI Studio](https://aistudio.google.com/app/apikey) adresinden Key alın.
+2. Bilgisayarınıza kaydedin:
 
-### Adım B: Anahtarı Bilgisayara Tanıtmak
-
-**🪟 Windows İçin (Kalıcı Yöntem):**
-Terminalinize şu komutu yapıştırın (`Sizin_Keyiniz` kısmını değiştirmeyi unutmayın):
+**🪟 Windows (Kalıcı):**
 ```cmd
-setx GOOGLE_API_KEY "AIzaSyD_Sizin_Kopyaladiginiz_Uzun_Sifre"
+setx GOOGLE_API_KEY "API_KEY_BURAYA_YAPISTIR"
 ```
-⚠️ **KRİTİK UYARI:** Bu komutu yazdıktan sonra anahtarın geçerli olması için **açık olan tüm terminalleri ve VS Code'u kapatıp yeniden açmanız ŞARTTIR.** Aksi halde "Key bulunamadı" hatası alırsınız.
+*(Komuttan sonra terminali kapatıp yeniden açın!)*
 
-**🐧 Linux / macOS İçin:**
+**🐧 Linux / macOS:**
 ```bash
-echo 'export GOOGLE_API_KEY="AIzaSyD_Sizin_Uzun_Sifreniz"' >> ~/.bashrc
+echo 'export GOOGLE_API_KEY="API_KEY_BURAYA"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
 ---
 
-## ▶️ Kullanım (Launcher Menüsü)
+## ▶️ Nasıl Kullanılır? (Ana Kumanda)
 
-Eskiden olduğu gibi karışık komutlar yazmanıza gerek yok. Artık her şeyi yöneten bir ana menümüz var.
-
-Sanal ortamınız aktifken (`venv` yazıyorken) şu komutu girin:
+Tüm sistemi yönetmek için tek bir komut yeterlidir:
 
 ```bash
 python launcher.py
 ```
 
-Karşınıza şöyle bir ekran gelecek:
-
-```text
-╔══════════════════════════════════════════╗
-║   🚀 CODER-ASISTAN (Projeler: 2)         ║
-╚══════════════════════════════════════════╝
-[1] odev-projesi       $0.0042
-[2] web-sitesi         $0.1205
-
-[N] ✨ Yeni Proje
-[E] 📦 Projeyi Paketle (Zip/Yedek)
-[Q] 🚪 Çıkış
-```
-
-* **Yeni Başlayanlar:** `N` tuşuna basıp proje adını girin. Sistem sizin için `my_projects` klasöründe izole bir alan oluşturur.
-* **Çalışmaya Başlamak:** Listeden proje numarasını (Örn: `1`) seçin.
-* **Sohbet:** Açılan ekranda AI'ya ne yapması gerektiğini söyleyin:
-    * *"Bana basit bir hesap makinesi yap."*
-    * *"main.py dosyasındaki hatayı bul."*
+Karşınıza gelen menüden:
+* **[N]** ile yeni proje oluşturabilir,
+* **[1-9]** ile mevcut projelerinize girip AI ile çalışmaya başlayabilirsiniz.
+* **[E]** ile projelerinizi ZIP olarak yedekleyebilirsiniz.
 
 ---
 
-## 🏗️ Yeni Proje Yapısı
+## 🛠️ İsviçre Çakısı: Yardımcı Araçlar
 
-Dosyalarınız nerede? Bizim sistemimiz artık düzenli bir fabrika gibi çalışır:
+Bu projede sadece kod yazan bir asistan yok, işinizi kolaylaştıracak bir dizi **profesyonel araç** bulunur. İşte alet çantanız:
+
+### 1. 🕵️‍♂️ Hafıza Müfettişi (`debug.py`)
+AI'nın projeniz hakkında ne bildiğini merak mı ediyorsunuz? Vektör veritabanının içine girip kaydedilen kod parçalarını okumanızı sağlar.
+```bash
+python debug.py
+```
+* **Ne zaman kullanılır?** AI, kodunuzu hatırlamıyorsa veya yanlış cevap veriyorsa hafızayı kontrol etmek için.
+
+### 2. 🚚 Proje Nakliyecisi (`migrate_projects.py`)
+Eski sürümden kalma veya yanlışlıkla ana dizine kopyaladığınız projeleri bulur ve otomatik olarak yeni sisteme (`my_projects` klasörüne) taşır.
+```bash
+python migrate_projects.py
+```
+* **Ne zaman kullanılır?** Klasörde projeniz var ama Launcher listesinde görünmüyorsa.
+
+### 3. 🩺 Sistem Doktoru (`system_audit.py`)
+Projelerinizin sağlık kontrolünü yapar. Log dosyaları dolu mu? Veritabanı bütünlüğü (integrity) sağlam mı? Hepsini raporlar.
+```bash
+python system_audit.py
+```
+* **Ne zaman kullanılır?** Sistemsel bir hatadan şüpheleniyorsanız veya veritabanı bozulduysa.
+
+### 4. 📝 Proje Katibi (`generate_docs.py`)
+Tüm projenizin kodlarını okur ve tek bir Markdown dosyasında (`proje_dokumu.md`) birleştirir.
+```bash
+python generate_docs.py
+```
+* **Ne zaman kullanılır?** Projenin tamamını ChatGPT/Claude gibi başka bir AI'ya atıp "Bunu analiz et" demek istediğinizde.
+
+### 5. 📡 Model Kontrolcüsü (`check_models.py`)
+Google hesabınızda tanımlı ve erişilebilir olan Gemini modellerini listeler.
+```bash
+python check_models.py
+```
+* **Ne zaman kullanılır?** "Hangi modelleri kullanabilirim?" diye merak ettiğinizde.
+
+---
+
+## 🧪 Gelişmiş Parametreler
+
+Projeye girdikten sonra (veya `assistant.py`'yi manuel kullanırken) şu modları kullanabilirsiniz:
+
+* **`--dry-run` (Prova Modu):**
+  AI kodları yazar, planı gösterir ama **dosyaya kaydetmez.**
+  ```bash
+  python assistant.py "Ana sayfayı değiştir" --dry-run
+  ```
+
+* **`--verbose` (Geveze Mod):**
+  Arka planda dönen ham JSON verisini ve düşünce sürecini gösterir. Hata ayıklamak için idealdir.
+  ```bash
+  python assistant.py "Hata bul" --verbose
+  ```
+
+---
+
+## 🏗️ Proje Mimarisi
 
 ```text
 coder-asistan/
-├─ launcher.py            # 🎮 ANA KUMANDA (Bunu çalıştırın)
-├─ assistant.py           # 🧠 İşlem motoru
-├─ config.py              # ⚙️ Ayarlar
-├─ my_projects/           # 📂 SİZİN PROJELERİNİZ BURADA
-│  ├─ odev-projesi/       # 🔒 Proje 1 (İzole)
-│  │  ├─ .coder_memory/   # 🧠 Bu projenin hafızası
-│  │  ├─ src/             # Kodlarınız
-│  │  └─ README.md
-│  └─ web-sitesi/         # 🔒 Proje 2
+├─ launcher.py          # 🎮 ANA KUMANDA (Başlatıcı)
+├─ assistant.py         # 🧠 İşlem Motoru
+├─ my_projects/         # 📂 PROJE FABRİKASI
+│  └─ odev-1/           # 🔒 İzole Proje Alanı
+│     ├─ .coder_memory/ # 🧠 Projeye özel hafıza
+│     └─ src/           # Kodlarınız
+├─ debug.py             # 🕵️‍♂️ Hafıza Müfettişi
+├─ system_audit.py      # 🩺 Sistem Doktoru
+├─ migrate_projects.py  # 🚚 Taşıyıcı
 └─ requirements.txt
 ```
 
 ---
 
-## 🧩 Desteklenen Modeller
+## 💡 İpuçları ve Püf Noktaları
 
-`config.py` üzerinden modeli değiştirebilirsiniz, ancak varsayılanlar şöyledir:
-
-| Model | Hız | Maliyet | Not |
-| :--- | :--- | :--- | :--- |
-| **Gemini 2.5 Flash** | ⚡ Çok Hızlı | **Ücretsiz** | ✅ Başlangıç için en iyisi. |
-| **Llama 3.3 (Groq)** | 🚀 Işık Hızı | Ücretsiz | Kodlama mantığı çok güçlü. |
-| **DeepSeek Chat** | 🧠 Çok Zeki | Çok Ucuz | Karmaşık algoritmalar için ideal. |
-
----
-
-## ❓ Sıkça Sorulan Sorular (Hata Çözümleri)
-
-**S: `ModuleNotFoundError: No module named 'google'` hatası alıyorum.**
-C: Kütüphaneler yüklenmemiş veya sanal ortam aktif değil.
-1. `venv\Scripts\activate` (Windows) veya `source venv/bin/activate` (Mac) yaptığınızdan emin olun.
-2. `pip install -r requirements.txt` komutunu tekrar çalıştırın.
-
-**S: `GOOGLE_API_KEY tanımlı değil` hatası alıyorum.**
-C: Anahtarı tanımladıktan sonra terminali kapatıp açmadınız. Windows'ta `setx` komutu, **yeni açılan** pencerelerde geçerli olur. VS Code'u tamamen kapatıp açın.
-
-**S: Hafıza (Memory) çalışmıyor veya hata veriyor.**
-C: Bilgisayarınızda C++ derleyicileri eksik olabilir (ChromaDB için gereklidir). Ancak endişelenmeyin, sistem otomatik olarak hafızasız moda geçip çalışmaya devam edecektir.
+* **🗑️ Proje Silme:** Bir projeyi silmek için Launcher'da bir komut yoktur. `my_projects` klasörüne gidip ilgili proje klasörünü **elle silmeniz** yeterlidir.
+* **🧠 Hafıza Sıfırlama:** AI eski kodları hatırlamakta ısrar ediyorsa veya kafası karıştıysa; proje klasörünüzdeki `.coder_memory` klasörünü silin. Coder-Asistan bir sonraki açılışta dosyaları tarayıp hafızayı sıfırdan kuracaktır.
+* **⚙️ İnce Ayarlar:** Dosya boyutu sınırlarını veya maliyet hesaplama yöntemini değiştirmek isterseniz `config.py` dosyasını düzenleyebilirsiniz.
 
 ---
 
 ## 👤 Geliştirici
 
-**Ahmet Çetin** (cetincevizcetoli)
-* GitHub: [github.com/cetincevizcetoli](https://github.com/cetincevizcetoli)
-* Web: [yapanzeka.acetin.com.tr](https://yapanzeka.acetin.com.tr/)
+**Ahmet Çetin**
+* **GitHub:** [github.com/cetincevizcetoli](https://github.com/cetincevizcetoli)
+* **Web:** [yapanzeka.acetin.com.tr](https://yapanzeka.acetin.com.tr)
 
-> *"Karmaşık kodları basitçe yönetin."*
+> *"Karmaşık kodları, kontrollü araçlarla yönetin."*
 ```
 
 #### 📄 Dosya: `requirements.txt`
@@ -1239,11 +1282,19 @@ import sys
 import sqlite3
 from pathlib import Path
 
+# Config dosyasından proje klasörünü öğrenelim
+try:
+    import config
+    PROJECTS_DIR_NAME = config.PROJECTS_DIR
+except ImportError:
+    PROJECTS_DIR_NAME = "my_projects"
+
 # Renkler
 GREEN = '\033[92m'
 RED = '\033[91m'
 YELLOW = '\033[93m'
 RESET = '\033[0m'
+CYAN = '\033[96m'
 
 def check_file_exists(path, description):
     if os.path.exists(path):
@@ -1277,7 +1328,7 @@ def audit_vector_db(project_path):
     print(f"\n--- 🧠 VEKTÖR VERİTABANI KONTROLÜ ---")
     
     if not os.path.exists(db_path):
-        print(f"{RED}❌ .coder_memory klasörü yok.{RESET}")
+        print(f"{RED}❌ .coder_memory klasörü yok (Hafızasız Proje).{RESET}")
         return
 
     if check_file_exists(sqlite_file, "ChromaDB SQLite Dosyası"):
@@ -1291,14 +1342,14 @@ def audit_vector_db(project_path):
             tables = cursor.fetchone()[0]
             print(f"   📊 Tablo Sayısı: {tables}")
             
-            # Embedding sayısını bulmaya çalış (Chroma versiyonuna göre tablo adı değişebilir)
-            # Genelde 'embeddings' tablosudur.
+            # Embedding sayısını bulmaya çalış
             try:
+                # Chroma versiyonuna göre tablo adı değişebilir, genelde 'embeddings'
                 cursor.execute("SELECT count(*) FROM embeddings;")
                 count = cursor.fetchone()[0]
                 print(f"   🧬 İndekslenmiş Vektör Sayısı: {GREEN}{count}{RESET}")
             except:
-                print(f"{YELLOW}   ⚠️ 'embeddings' tablosu direkt okunamadı (Chroma yapısı farklı olabilir).{RESET}")
+                print(f"{YELLOW}   ⚠️ 'embeddings' tablosu direkt okunamadı (Versiyon farkı olabilir).{RESET}")
                 
             conn.close()
             print(f"{GREEN}   ✅ Veritabanı bütünlüğü (Integrity) sağlam.{RESET}")
@@ -1307,16 +1358,24 @@ def audit_vector_db(project_path):
             print(f"{RED}   ❌ Veritabanı bozuk veya okunamıyor: {e}{RESET}")
 
 def main():
-    workspace = Path.cwd()
+    # DÜZELTME: Artık kök dizine değil, my_projects içine bakıyoruz
+    workspace = Path.cwd() / PROJECTS_DIR_NAME
     
-    # Projeleri bul
+    if not workspace.exists():
+        print(f"{RED}Hata: '{PROJECTS_DIR_NAME}' klasörü bulunamadı.{RESET}")
+        return
+
+    # Projeleri bul (içinde .coder_memory olan klasörler)
     projects = [d for d in workspace.iterdir() if d.is_dir() and (d / ".coder_memory").exists()]
+    
+    print(f"{CYAN}🔍 SİSTEM DENETÇİSİ BAŞLATILDI{RESET}")
+    print(f"📂 Hedef Dizin: {workspace}")
     
     if not projects:
         print(f"{RED}Test edilecek proje bulunamadı.{RESET}")
         return
 
-    print(f"🔍 {len(projects)} adet proje bulundu.")
+    print(f"✅ {len(projects)} adet proje tespit edildi.")
     
     for proj in projects:
         print(f"\n{YELLOW}========================================{RESET}")

@@ -1,0 +1,24 @@
+════════════════════════════════════════════════════════════
+📅 ZAMAN: 2025-12-17 11:52 | 🤖 MODEL: Google Gemini 2.5 Flash Lite (Hızlı & Kararlı)
+👤 USER: bana belge adında klasor olustur ve ıcıne ısımler adında  txt doyası ıle braber  txt  dosyasının ıcınde  10 adet ad soayd  ekle
+🤖 AI:   belge/isimler.txt üzerinde çalışıldı.
+════════════════════════════════════════════════════════════
+📅 ZAMAN: 2025-12-17 11:54 | 🤖 MODEL: Google Gemini 2.5 Flash Lite (Hızlı & Kararlı)
+👤 USER: belge klasorundekı ısımlerı  tarayıcıuya  yazdıracak html ve js kodu olustur
+🤖 AI:   index.html, script.js üzerinde çalışıldı.
+════════════════════════════════════════════════════════════
+📅 ZAMAN: 2025-12-17 12:01 | 🤖 MODEL: Google Gemini 2.5 Flash Lite (Hızlı & Kararlı)
+👤 USER: html dosyamda  bootstrap kullan
+🤖 AI:   index.html dosyaları düzenlendi/oluşturuldu.
+════════════════════════════════════════════════════════════
+📅 ZAMAN: 2025-12-17 12:03 | 🤖 MODEL: Google Gemini 2.5 Flash Lite (Hızlı & Kararlı)
+👤 USER: bır yanlıs  yapmısız .  index html dosyası  ve  js  dosyamız   belge  kasloru ıcındekı isimler.txt  dosyasının ıcerıgını ekrana  ayzdırmalı . degısıklıgı uygularmısın
+🤖 AI:   index.html, belge/script.js, README.md dosyaları düzenlendi/oluşturuldu.
+════════════════════════════════════════════════════════════
+📅 ZAMAN: 2025-12-17 12:09 | 🤖 MODEL: Google Gemini 2.5 Flash Lite (Hızlı & Kararlı)
+👤 USER: 2. Bu projeyi tarayıcıda test edebilmem için bana ana dizinde çalıştırabileceğim python http server komutunu ver.
+🤖 AI:   README.md, index.html, belge/script.js, belge/isimler.txt, run_http_server.sh dosyaları düzenlendi/oluşturuldu.
+════════════════════════════════════════════════════════════
+📅 ZAMAN: 2025-12-17 12:19 | 🤖 MODEL: Google Gemini 2.5 Flash Lite
+👤 USER: Proje yapısını kontrol et. Ana dizinde fazlalık olarak duran 'script.js' dosyasını silmeni istiyorum. Bizim asıl script dosyamız 'belge/script.js' olmalı. Ayrıca 'index.html' dosyasının doğru script yoluna ('belge/script.js') baktığından emin ol ve gerekirse düzelt. Yaptığın işlemleri bana açıkla.
+🤖 AI:   Ana dizindeki fazlalık olan 'script.js' dosyası silindi ve 'index.html' dosyasındaki script yolu 'belge/script.js' olarak güncellendi.
