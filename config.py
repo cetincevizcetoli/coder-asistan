@@ -1,7 +1,7 @@
 import os
 
 # ==========================================
-# 🎨 RENK AYARLARI (Terminal Çıktısı İçin)
+# 🎨 RENK AYARLARI
 # ==========================================
 class Colors:
     GREEN = '\033[92m'
@@ -9,41 +9,59 @@ class Colors:
     YELLOW = '\033[93m'
     BLUE = '\033[94m'
     CYAN = '\033[96m'
+    MAGENTA = '\033[95m'
+    GREY = '\033[90m'
     BOLD = '\033[1m'
     RESET = '\033[0m'
 
 # ==========================================
 # ⚙️ SİSTEM VE DOSYA AYARLARI
 # ==========================================
-# Dosya okuma/yazma limitleri (Sihirli sayılar burada toplandı)
-MAX_FILE_SIZE = 5 * 1024 * 1024        # 5 MB (Tek dosya limiti)
-MAX_TOTAL_SIZE = 20 * 1024 * 1024      # 20 MB (Toplam proje okuma limiti)
-BACKUP_DIR = ".gassist_backups"        # Yedekleme klasörü
-HISTORY_LOG = ".gassist_history.log"   # Log dosyası
-MAX_BACKUPS_PER_FILE = 10              # Bir dosya için tutulacak max yedek
+MAX_FILE_SIZE = 5 * 1024 * 1024
+MAX_TOTAL_SIZE = 20 * 1024 * 1024
+BACKUP_DIR = ".gassist_backups"
+MAX_BACKUPS_PER_FILE = 5
+MEMORY_DIR_NAME = ".coder_memory"
+COLLECTION_NAME = "project_codebase"
+EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+MAX_CONTEXT_RESULTS = 3
+MAX_CONTEXT_CHARS = 12000
+MAX_BACKUPS_PER_FILE = 10
 
 
+# YENİ: Projelerin toplanacağı ana klasör
+PROJECTS_DIR = "my_projects"
 
 # ==========================================
-# 🤖 MODEL AYARLARI (Deklarasyon)
+# 💰 MALİYET VE KATMAN
 # ==========================================
-# Not: API Anahtarları (Secret) burada değil, os.getenv ile çekilecek.
-# config.py dosyasındaki MODEL_CONFIGS sözlüğünü güncelleyin
+USER_TIER = 'free' 
+PRICING_RATES = {
+    "gemini-2.5-flash-lite": { "input": 0.075, "output": 0.30 },
+    "gemini-2.5-flash": { "input": 0.10, "output": 0.40 },
+    "llama-3.3-70b-versatile": { "input": 0.59, "output": 0.79 },
+    "deepseek-chat": { "input": 0.14, "output": 0.28 },
+    "Qwen/Qwen2.5-Coder-7B-Instruct": { "input": 0.0, "output": 0.0 }
+}
+
+# ==========================================
+# 🤖 MODEL AYARLARI
+# ==========================================
 MODEL_CONFIGS = {
     "gemini": {
         "env_var": "GOOGLE_API_KEY",
-        "model_name": "gemini-2.5-flash",
-        "display_name": "Google Gemini 2.5 Flash",
+        "model_name": "gemini-2.5-flash-lite", 
+        "display_name": "Google Gemini 2.5 Flash Lite",
     },
     "groq": {
         "env_var": "GROQ_API_KEY",
         "model_id": "llama-3.3-70b-versatile",
-        "display_name": "Groq Llama 3.3 70B (ÜCRETSİZ)",
+        "display_name": "Groq Llama 3.3 70B",
     },
     "deepseek": {
         "env_var": "DEEPSEEK_API_KEY",
         "model_id": "deepseek-chat",
-        "display_name": "DeepSeek Chat (ÜCRETSİZ)",
+        "display_name": "DeepSeek Chat",
     },
     "huggingface": {
         "env_var": "HUGGINGFACE_API_KEY",
@@ -52,18 +70,21 @@ MODEL_CONFIGS = {
     }
 }
 
-# (Dosyanın geri kalanı aynı kalacak)
-
 # ==========================================
-# 🧠 AI SİSTEM TALİMATI (System Prompt)
+# 🧠 YENİ AI SİSTEM TALİMATI (Akıllı JSON Modu)
 # ==========================================
 SYSTEM_INSTRUCTION = (
     "Sen uzman bir yazılım mimarı ve kodlama asistanısın. "
-    "Görevin: Verilen talimatlara göre dosya yapısını oluşturmak veya güncellemektir.\n"
+    "Görevin: Verilen talimatlara ve RAG hafızasından gelen bağlama göre projeyi yönetmektir.\n"
     "KURALLAR:\n"
     "1. Yanıtın SADECE ve SADECE geçerli bir JSON objesi olmalıdır.\n"
-    "2. JSON formatı: {'dosya_yolu': 'dosya_icerigi'}\n"
-    "3. Asla Markdown (```json ... ```) kullanma, sadece saf JSON döndür.\n"
-    "4. Sohbet etme, açıklama yapma, sadece JSON ver.\n"
+    "2. JSON formatı ŞU ŞEKİLDE OLMALIDIR:\n"
+    "{\n"
+    "  'aciklama': 'Yaptığınız işlemin kısa bir özeti ve nedeni (Örn: Hatalı yolu düzelttim)',\n"
+    "  'dosya_olustur': {'dosya_yolu': 'icerik', 'dosya_yolu2': 'icerik'},\n"
+    "  'dosya_sil': ['silinecek_dosya_yolu_1', 'silinecek_dosya_yolu_2']\n"
+    "}\n"
+    "3. Eğer silinecek dosya yoksa 'dosya_sil': [] gönder.\n"
+    "4. Asla Markdown (```json ... ```) kullanma, sadece saf JSON döndür.\n"
     "5. Türkçe karakterleri UTF-8 olarak koru."
 )

@@ -7,15 +7,14 @@ Bu döküm, **D:\projects\coder-asistan** dizini (mevcut klasör) ve altındakil
 - **coder-asistan/** (Proje Kökü)
   - assistant.py
   - check_models.py
-  - claude_oneri.txt
   - config.py
-  - index.html
   - model_selector.py
   - proje_dokumu_orjınal.md
   - readme.md
   - requirements.txt
   - **core/**
     - base.py
+    - deepseek.py
     - gemini.py
     - groq.py
     - huggingface.py
@@ -48,7 +47,12 @@ try:
     GROQ_AVAILABLE = True
 except ImportError:
     GROQ_AVAILABLE = False
-
+# --- IMPORT: DEEPSEEK (Yeni) ---
+try:
+    from core.deepseek import DeepSeekModel
+    DEEPSEEK_AVAILABLE = True
+except ImportError:
+    DEEPSEEK_AVAILABLE = False
 # --- IMPORT: HUGGING FACE (Opsiyonel) ---
 try:
     from core.huggingface import HuggingFaceModel
@@ -78,8 +82,12 @@ def get_model_choice():
     if HF_AVAILABLE:
         print(f"  [3] {MODEL_CONFIGS['huggingface']['display_name']}")
     
+    # DeepSeek seçeneği ekleyin
+    if DEEPSEEK_AVAILABLE:
+        print(f"  [4] {MODEL_CONFIGS['deepseek']['display_name']}")
+    
     while True:
-        choice = input(f"\n{Colors.YELLOW}Seçiminiz (1/2/3): {Colors.RESET}").strip()
+        choice = input(f"\n{Colors.YELLOW}Seçiminiz (1/2/3/4): {Colors.RESET}").strip()
         
         if choice == "1":
             try:
@@ -98,6 +106,13 @@ def get_model_choice():
                 return HuggingFaceModel()
             except Exception as e:
                 print(f"{Colors.RED}Hugging Face Başlatılamadı: {e}{Colors.RESET}")
+        
+        # DeepSeek seçeneği ekleyin
+        elif choice == "4" and DEEPSEEK_AVAILABLE:
+            try:
+                return DeepSeekModel()
+            except Exception as e:
+                print(f"{Colors.RED}DeepSeek Başlatılamadı: {e}{Colors.RESET}")
         else:
             print(f"{Colors.RED}Geçersiz seçim veya model hazır değil.{Colors.RESET}")
 
@@ -369,6 +384,7 @@ MAX_BACKUPS_PER_FILE = 10              # Bir dosya için tutulacak max yedek
 # 🤖 MODEL AYARLARI (Deklarasyon)
 # ==========================================
 # Not: API Anahtarları (Secret) burada değil, os.getenv ile çekilecek.
+# config.py dosyasındaki MODEL_CONFIGS sözlüğünü güncelleyin
 MODEL_CONFIGS = {
     "gemini": {
         "env_var": "GOOGLE_API_KEY",
@@ -376,10 +392,15 @@ MODEL_CONFIGS = {
         "display_name": "Google Gemini 2.5 Flash",
     },
     "groq": {
-    "env_var": "GROQ_API_KEY",
-    "model_id": "llama-3.3-70b-versatile",  # ÜCRETSİZ KATMANDA BULUNUR
-    "display_name": "Groq Llama 3.3 70B (ÜCRETSİZ)",
-},
+        "env_var": "GROQ_API_KEY",
+        "model_id": "llama-3.3-70b-versatile",
+        "display_name": "Groq Llama 3.3 70B (ÜCRETSİZ)",
+    },
+    "deepseek": {
+        "env_var": "DEEPSEEK_API_KEY",
+        "model_id": "deepseek-chat",
+        "display_name": "DeepSeek Chat (ÜCRETSİZ)",
+    },
     "huggingface": {
         "env_var": "HUGGINGFACE_API_KEY",
         "model_id": "Qwen/Qwen2.5-Coder-7B-Instruct",
@@ -403,44 +424,6 @@ SYSTEM_INSTRUCTION = (
     "5. Türkçe karakterleri UTF-8 olarak koru."
 )
 
-```
-
-#### 📄 Dosya: `index.html`
-
-```html
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bootstrap Form Örneği</title>
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-9ndCyUaIbzAi2FUVXJi0CjmCapSmO7SnpJef0486qhLnuZ2cdeRhO02iuK6FUUVM" crossorigin="anonymous">
-</head>
-<body>
-    <div class="container mt-5">
-        <h2>Basit Form Örneği</h2>
-        <form>
-            <div class="mb-3">
-                <label for="adSoyad" class="form-label">Ad Soyad</label>
-                <input type="text" class="form-control" id="adSoyad" placeholder="Adınızı ve Soyadınızı Girin">
-            </div>
-            <div class="mb-3">
-                <label for="email" class="form-label">E-posta Adresi</label>
-                <input type="email" class="form-control" id="email" placeholder="name@example.com">
-            </div>
-            <div class="mb-3">
-                <label for="mesaj" class="form-label">Mesajınız</label>
-                <textarea class="form-control" id="mesaj" rows="3"></textarea>
-            </div>
-            <button type="submit" class="btn btn-primary">Gönder</button>
-        </form>
-    </div>
-
-    <!-- Bootstrap JS (isteğe bağlı, form için zorunlu değil ama iyi pratik) -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" integrity="sha384-geWF76RCwLtnZ8qwWowPQNguL3RmwHVBC9FhGdlKrxdiJJigb/j/68SIy3Te4Bkz" crossorigin="anonymous"></script>
-</body>
-</html>
 ```
 
 #### 📄 Dosya: `model_selector.py`
@@ -560,6 +543,74 @@ class BaseModel:
     def generate_content(self, system_instruction, prompt_text):
         """AI'dan içerik üretme çağrısı."""
         raise NotImplementedError("Bu metot alt sınıflar tarafından uygulanmalıdır.")
+```
+
+#### 📄 Dosya: `core\deepseek.py`
+
+```py
+# core/deepseek.py
+import os
+import requests
+from .base import BaseModel, ModelAPIError
+from config import MODEL_CONFIGS
+
+class DeepSeekModel(BaseModel):
+    """DeepSeek API - Ücretsiz ve güçlü"""
+    
+    def __init__(self):
+        conf = MODEL_CONFIGS["deepseek"]
+        self.MODEL_NAME = conf["display_name"]
+        
+        self.api_key = os.getenv(conf["env_var"])
+        if not self.api_key:
+            raise ModelAPIError(f"{conf['env_var']} ortam değişkeni bulunamadı.")
+        
+        # DeepSeek OpenAI uyumlu API uç noktası
+        self.api_url = "https://api.deepseek.com/v1/chat/completions"
+        self.model_id = conf["model_id"]
+    
+    def generate_content(self, system_instruction, prompt_text):
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "model": self.model_id,
+            "messages": [
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": prompt_text}
+            ],
+            "temperature": 0.1,
+            "max_tokens": 8000,
+            "response_format": {"type": "json_object"}  # JSON zorla
+        }
+        
+        try:
+            response = requests.post(self.api_url, headers=headers, json=payload, timeout=60)
+            response.raise_for_status()
+            result = response.json()
+            
+            # Debug için
+            if hasattr(self, 'DEBUG') and self.DEBUG:
+                print(f"DEBUG DeepSeek Response: {result}")
+                
+            return result["choices"][0]["message"]["content"].strip()
+            
+        except requests.exceptions.RequestException as e:
+            # Hata mesajını daha detaylı görmek için
+            if hasattr(e, 'response') and e.response is not None:
+                error_msg = e.response.text
+                print(f"DEBUG DeepSeek Error: {error_msg}")
+                try:
+                    error_json = json.loads(error_msg)
+                    raise ModelAPIError(f"DeepSeek Hatası: {error_json.get('message', str(e))}")
+                except:
+                    raise ModelAPIError(f"DeepSeek API Hatası: {e}")
+            else:
+                raise ModelAPIError(f"DeepSeek Bağlantı Hatası: {e}")
+        except Exception as e:
+            raise ModelAPIError(f"DeepSeek İşlem Hatası: {e}")
 ```
 
 #### 📄 Dosya: `core\gemini.py`
